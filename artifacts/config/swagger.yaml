@@ -1,0 +1,344 @@
+openapi: 3.0.0
+
+servers:
+  - description: Local tests
+    url: http://localhost:8080/
+
+info:
+  version: "1.0.0"
+  title: Data Deduplication API
+  description: |-
+    Data deduplication over multiple columns (names, addresses, emails, phones):
+
+      - **train model**: train or update model artifacts (active learning optional)
+      - **dataset deduplication**: detect clusters of duplicates in a dataset
+      - **record to dataset linkage**: link a new record to an existing dataset
+
+paths:
+  /train-model:
+    post:
+      description: Train model incrementaly or from scratch
+      operationId: TrainModel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrainConfiguration'
+      responses:
+        '200':
+          description: Standard success response (train)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardSuccessResponse'
+        '400':
+          $ref: '#/components/responses/InvalidValue'
+        '408':
+          $ref: '#/components/responses/RequestTimeout'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /dataset-deduplication:
+    post:
+      description: Detect duplicate clusters
+      operationId: DetectDuplicateClusters
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FuzzyConfiguration'
+      responses:
+        '200':
+          description: Standard success response (deduplication)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardSuccessResponse'
+        '400':
+          $ref: '#/components/responses/InvalidValue'
+        '408':
+          $ref: '#/components/responses/RequestTimeout'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /record-to-dataset-linkage:
+    post:
+      description: Link new record to dataset
+      operationId: RecordLinkToDataset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordInfo'
+      responses:
+        '200':
+          description: Standard success response (linkage)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardSuccessResponse'
+        '400':
+          $ref: '#/components/responses/InvalidValue'
+        '408':
+          $ref: '#/components/responses/RequestTimeout'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /get-models-info:
+    get:
+      description: Get meta info on trained data
+      operationId: GetTrainedInfo
+      parameters:
+        - name: model_id
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+          description: Optional model identifier
+      responses:
+        '200':
+          description: Standard success response (models info)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardSuccessResponse'
+        '400':
+          $ref: '#/components/responses/InvalidValue'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '408':
+          $ref: '#/components/responses/RequestTimeout'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+components:
+  schemas:
+    TrainConfiguration:
+      type: object
+      additionalProperties: false
+      properties:
+        model_id:
+          type: integer
+          default: 1
+        input_path:
+          type: string
+          description: Path to CSV/JSON dataset (inside container or host mount)
+          example: "data/raw/faker.csv"
+        raw_dir_filename:
+          type: string
+          description: Filename located in data/raw/
+          example: "faker.csv"
+        filename:
+          type: string
+          description: Filename used when sending base64_file
+          example: "faker.csv"
+        base64_file:
+          type: string
+          description: Base64 content of the file (optional)
+        id_column:
+          type: string
+          default: "id"
+        encoding:
+          type: string
+          default: "utf-8"
+        limit:
+          type: integer
+          description: Optional max number of rows to load
+        num_processes:
+          type: integer
+          default: 1
+        enable_active_learning:
+          type: boolean
+          default: false
+        use_existing_training:
+          type: boolean
+          default: true
+        enable_candidates:
+          type: boolean
+          default: true
+      required:
+        - model_id
+
+    FuzzyConfiguration:
+      type: object
+      additionalProperties: false
+      properties:
+        model_id:
+          type: integer
+          default: 1
+        input_path:
+          type: string
+          example: "data/raw/faker.csv"
+        raw_dir_filename:
+          type: string
+          example: "faker.csv"
+        filename:
+          type: string
+          example: "faker.csv"
+        base64_file:
+          type: string
+        id_column:
+          type: string
+          default: "id"
+        encoding:
+          type: string
+          default: "utf-8"
+        limit:
+          type: integer
+        num_processes:
+          type: integer
+          default: 1
+        cluster_threshold:
+          type: number
+          default: 0.5
+        enable_active_learning:
+          type: boolean
+          default: false
+        use_existing_training:
+          type: boolean
+          default: true
+        enable_candidates:
+          type: boolean
+          default: true
+      required:
+        - model_id
+
+    RecordInfo:
+      type: object
+      additionalProperties: false
+      properties:
+        model_id:
+          type: integer
+          default: 1
+        confidence_filter:
+          type: number
+          default: 0.65
+        record_info:
+          type: object
+          additionalProperties: false
+          properties:
+            family_name_list:
+              type: array
+              items:
+                type: string
+            first_name_list:
+              type: array
+              items:
+                type: string
+            sex:
+              type: string
+            birth_date:
+              type: string
+            address_complete_list:
+              type: array
+              items:
+                type: string
+            emails:
+              type: array
+              items:
+                type: string
+            telephones:
+              type: array
+              items:
+                type: integer
+          required:
+            - family_name_list
+            - first_name_list
+      required:
+        - model_id
+        - record_info
+
+    StandardSuccessResponse:
+      type: object
+      required:
+        - code
+        - type
+        - message
+        - data
+      properties:
+        code:
+          type: string
+          example: "200"
+        type:
+          type: string
+          example: "SUCCESS"
+        message:
+          type: string
+          example: "Operation completed"
+        data:
+          type: object
+          description: Endpoint-specific payload
+
+    StdErrorResponse:
+      type: object
+      required:
+        - code
+        - message
+        - type
+      properties:
+        code:
+          type: string
+          example: "400"
+        message:
+          type: string
+        type:
+          type: string
+        details:
+          type: string
+        timestamp:
+          type: string
+
+  responses:
+    NotFound:
+      description: Ressource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StdErrorResponse'
+
+    InvalidValue:
+      description: Invalid value supplied
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StdErrorResponse'
+
+    Forbidden:
+      description: Request forbidden by server
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StdErrorResponse'
+
+    RequestTimeout:
+      description: Timeout, please check your network settings
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StdErrorResponse'
+
+    TooManyRequests:
+      description: The request is aborted, no available instance
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StdErrorResponse'
+
+    ServiceUnavailable:
+      description: Service Unavailable
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StdErrorResponse'

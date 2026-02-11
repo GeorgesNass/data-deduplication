@@ -1,0 +1,189 @@
+{
+  "project": {
+    "name": "data-deduplication",
+    "version": "1.0.0"
+  },
+  "defaults": {
+    "cluster_threshold": 0.5,
+    "list_similarity_threshold": 85,
+    "flag_clean_data": true,
+    "flag_statistics": false,
+    "max_records": 100000
+  },
+  "dataset": {
+    "list_basic_non_sensitive": [
+      "id",
+      "birth_family_name",
+      "birth_first_name",
+      "ins_registration_number",
+      "gap_origin_id",
+      "origin",
+      "origin_id"
+    ],
+    "list_nested_columns": [
+      "birth_family_name_list",
+      "birth_first_name_list",
+      "addresses_street",
+      "addresses_complement",
+      "addresses_city",
+      "addresses_postal_code",
+      "addresses_country",
+      "emails",
+      "telephones"
+    ]
+  },
+  "visualization": {
+    "data_viz_threshold_barplot": 400,
+    "data_viz_threshold_pie": 0.1
+  },
+  "variables_setting": {
+    "sex": { "type": "Exact" },
+    "civility": { "type": "Exact" },
+    "nationality": { "type": "ShortString" },
+
+    "birth_first_name": { "type": "String" },
+    "birth_family_name": { "type": "String" },
+    "usage_first_name": { "type": "String" },
+    "usage_family_name": { "type": "String" },
+
+    "birth_date": {
+      "type": "DateTime",
+      "fuzzy": true,
+      "dayfirst": false,
+      "yearfirst": true
+    },
+
+    "birth_city": { "type": "Exact" },
+    "birth_postal_code": { "type": "Exact" },
+    "birth_country": { "type": "Exact" },
+
+    "addresses_street": { "type": "Custom" },
+    "addresses_complement": { "type": "Custom" },
+    "addresses_city": { "type": "Custom" },
+    "addresses_postal_code": { "type": "Custom" },
+    "addresses_country": { "type": "Custom" },
+
+    "birth_first_name_list": { "type": "Custom" },
+    "birth_family_name_list": { "type": "Custom" },
+    "emails": { "type": "Custom" },
+    "telephones": { "type": "Custom" },
+
+    "combined_full_name": {
+      "type": "Interaction",
+      "interaction_variables": [
+        "birth_first_name_list",
+        "birth_family_name_list"
+      ]
+    },
+    "combined_full_name_birth": {
+      "type": "Interaction",
+      "interaction_variables": [
+        "birth_first_name",
+        "birth_family_name"
+      ]
+    },
+    "combined_first_name_last_birth": {
+      "type": "Interaction",
+      "interaction_variables": [
+        "birth_first_name_list",
+        "birth_family_name"
+      ]
+    },
+    "combined_last_name_first_birth": {
+      "type": "Interaction",
+      "interaction_variables": [
+        "birth_first_name",
+        "birth_family_name_list"
+      ]
+    },
+    "combined_full_address": {
+      "type": "Interaction",
+      "interaction_variables": [
+        "addresses_street",
+        "addresses_complement",
+        "addresses_postal_code",
+        "addresses_city",
+        "addresses_country"
+      ]
+    },
+    "combined_street_city": {
+      "type": "Interaction",
+      "interaction_variables": [
+        "addresses_street",
+        "addresses_city"
+      ]
+    },
+    "combined_street_postal_code": {
+      "type": "Interaction",
+      "interaction_variables": [
+        "addresses_street",
+        "addresses_postal_code"
+      ]
+    },
+    "combined_complement_city": {
+      "type": "Interaction",
+      "interaction_variables": [
+        "addresses_complement",
+        "addresses_city"
+      ]
+    },
+    "combined_complement_postal_code": {
+      "type": "Interaction",
+      "interaction_variables": [
+        "addresses_complement",
+        "addresses_postal_code"
+      ]
+    },
+    "combined_birth_address": {
+      "type": "Interaction",
+      "interaction_variables": [
+        "birth_city",
+        "birth_postal_code",
+        "birth_country"
+      ]
+    }
+  },
+  "endpoints": {
+    "trainModel": {
+      "required": ["model_id"],
+      "optional": [
+        "input_path",
+        "raw_dir_filename",
+        "base64_file",
+        "filename",
+        "id_column",
+        "encoding",
+        "limit",
+        "num_processes",
+        "enable_active_learning",
+        "use_existing_training",
+        "enable_candidates"
+      ]
+    },
+    "datasetDeduplicationCluster": {
+      "required": ["model_id"],
+      "optional": [
+        "input_path",
+        "raw_dir_filename",
+        "base64_file",
+        "filename",
+        "id_column",
+        "encoding",
+        "limit",
+        "num_processes",
+        "cluster_threshold",
+        "enable_active_learning",
+        "use_existing_training",
+        "enable_candidates"
+      ]
+    },
+    "recordDatasetLinkage": {
+      "required": ["model_id", "record_info"],
+      "optional": ["confidence_filter"]
+    },
+    "getModelsInfo": {
+      "required": [],
+      "optional": ["model_id"]
+    }
+  }
+}
