@@ -1,60 +1,134 @@
-# 🧠 Fuzzy Records Resolution API
+# 🔗 Fuzzy Data Deduplication API
 
-## 1. Project Overview
-
-This project provides a **Fuzzy Record Resolution API** designed to detect, cluster, and link duplicate records across large datasets.
-
-The system combines:
-
-- Heuristic blocking strategies
-- Distance-based similarity metrics
-- Supervised Machine Learning (regularized logistic regression)
-- Active learning for model improvement
-- Agglomerative clustering for duplicate grouping
-
-It supports model training, dataset deduplication, record linkage, and metadata retrieval via REST API.
+The platform detects, clusters, and links **duplicate records across large datasets** using blocking strategies, similarity learning, and clustering techniques.
 
 ---
 
-## 2. Problem Statement
+## 🎯 Project Overview
 
-Large datasets (customer records, patient records, CRM exports, etc.) often contain:
+Main capabilities:
 
-- Duplicate entries
-- Slight spelling variations
-- Inconsistent formatting
-- Missing or noisy data
-
-A naive pairwise comparison scales quadratically:
-
-- 42k records → ~880M comparisons
-- 1M records → ~500B comparisons
-
-This project addresses scalability and accuracy using blocking, similarity learning, and clustering.
+* Detect duplicate records in large datasets
+* Perform dataset deduplication
+* Link external records to existing datasets
+* Train supervised similarity models
+* Support active learning for model improvement
+* Expose functionality via **REST API**
 
 ---
 
-## 3. Extraction & Resolution Strategy
+## ⚙️ Tech Stack
 
+* Python
+* FastAPI
+* Docker & Docker Compose
+* MongoDB
+* Logistic Regression
+* Affine Gap similarity
+* Agglomerative clustering
+* Active learning
 
-The complete fuzzy resolution workflow is summarized below:
+---
 
-| Phase | Component | Description | Output |
-|-------|------------|------------|--------|
-| 1 | Column Configuration | Define optional, intersected, or customized fields for training | Optimized feature set |
-| 2 | Model Training | Train or update model using labeled examples | Trained ML model |
-| 3 | Blocking | Apply heuristic predicates (tokens, n-grams, metaphone, numeric, geo rules) | Reduced candidate pairs |
-| 4 | Similarity Scoring | Compute Affine Gap and other lexicographic distances | Similarity scores |
-| 5 | Supervised Learning | Logistic regression classifies duplicate vs non-duplicate | Labeled record pairs |
-| 6 | Active Learning | Low-confidence predictions manually validated and reinjected | Improved model |
-| 7 | Clustering | Agglomerative clustering with centroid linkage | Duplicate clusters |
-| 8 | API Exposure | REST endpoints for training, deduplication, linkage, metadata | JSON responses |
+## 📂 Project Structure
 
-### Methodological Details
+```text
+.
+├── README.md                              ## Project overview, usage, API description
+├── requirements.txt                       ## Python dependencies
+├── .env                                   ## Environment variables
+├── menu_pipeline.sh                       ## CLI menu to trigger pipeline actions
+├── main.py                                ## Application entry point (API launcher)
+│
+├── docker/
+│   ├── Dockerfile                         ## Application container definition
+│   └── docker-compose.yml                 ## Local orchestration
+│
+├── artifacts/
+│   ├── config/
+│   │   ├── swagger.yaml                   ## API specification
+│   │   └── data_control.json              ## Validation configuration
+│   │
+│   └── examples/
+│       ├── train_model_example_1.json     ## Example payload for training
+│       ├── dataset_deduplication_example_2.json
+│       └── record_to_dataset_linkage_example_3.json
+│
+├── data/
+│   ├── raw/
+│   │   └── faker.csv                      ## Example dataset
+│   │
+│   └── active_learning/
+│       ├── trained_model_config_1         ## Persisted model configuration
+│       └── variables_predicates_weights_1 ## Learned predicate weights
+│
+├── tests/
+│   └── test_unit.py                       ## Unit tests
+│
+└── src/
+    ├── pipeline.py                        ## Pipeline orchestration
+    │
+    ├── core/
+    │   ├── config.py                      ## Configuration management
+    │   ├── errors.py                      ## Custom exceptions
+    │   ├── service.py                     ## FastAPI routes
+    │   └── controls.py                    ## Request validation
+    │
+    ├── model/
+    │   ├── cleaning.py                    ## Data cleaning utilities
+    │   ├── fuzzy_analysis.py              ## Similarity computation
+    │   ├── deduplication.py               ## Deduplication pipeline
+    │   └── active_learning.py             ## Active learning workflow
+    │
+    └── utils/
+        ├── utils.py                       ## Shared helpers
+        └── logging_utils.py               ## Logging utilities
+```
+
+---
+
+## ❓ Problem Statement
+
+Large datasets frequently contain duplicate records due to:
+
+* spelling variations
+* inconsistent formatting
+* missing fields
+* multiple data sources
 
 ![Combinatorial Explosion Illustration](https://i.ibb.co/Y3t9Fg0/combinations.png)
 
-**Blocking Heuristics**
+Naive pairwise comparison scales quadratically:
+
+* **42k records → ~880M comparisons**
+* **1M records → ~500B comparisons**
+
+This project solves scalability and accuracy using **blocking, similarity learning, clustering and active learning **.
+
+---
+
+## 🧠 Approach / Methodology / Strategy
+
+The complete fuzzy resolution workflow is summarized below:
+
+### Extraction & Resolution Strategy
+
+| Phase | Component            | Description                         | Output             |
+| ----- | -------------------- | ----------------------------------- | ------------------ |
+| 1     | Column Configuration | Define fields used for matching     | Optimized features |
+| 2     | Model Training       | Train classifier with labeled pairs | Trained model      |
+| 3     | Blocking             | Reduce candidate comparisons        | Candidate pairs    |
+| 4     | Similarity Scoring   | Compute distance metrics            | Similarity scores  |
+| 5     | Supervised Learning  | Classify duplicates                 | Labeled pairs      |
+| 6     | Active Learning      | Improve model with human feedback   | Updated model      |
+| 7     | Clustering           | Group duplicates                    | Duplicate clusters |
+| 8     | API Exposure         | REST interface                      | JSON responses     |
+
+![Complete Methodology Overview](https://i.ibb.co/2qGZ2TZ/complete-approach-methodology.png)
+
+The project implements the following steps.
+
+#### a) Blocking Heuristics
 
 Next table shows the most performant heuristics used, in order to limit the potential pairs of records to be compared.
 
@@ -96,45 +170,46 @@ Next table shows the most performant heuristics used, in order to limit the pote
 | order Of Magnitude | common order of magnitude (log10 geo position) |
 | round To l | geographic rounding to precision level |
 
-![Affine Gap Distance Illustration](https://i.ibb.co/VwWH0B2/afine-gap-distance.png)
-
-**Similarity Metric**
+#### b) Similarity Metric
 
 Similarity is computed using **Affine Gap distance** (edit-distance variant):
+
+![Affine Gap Distance Illustration](https://i.ibb.co/VwWH0B2/afine-gap-distance.png)
 
 - Counts insertions, deletions and substitutions
 - Produces a normalized similarity score
 - Used as feature input for the logistic regression classifier
 
-![Active Learning Process](https://i.ibb.co/XkZn64H/active-learning.png)
-
-**Clustering Strategy**
+#### c) Clustering Strategy
 
 Duplicates are grouped via:
 1. Agglomerative clustering
 2. Centroid linkage similarity
 
-
 ![Clustering Process](https://i.ibb.co/D1KnDRG/clustering.png)
+
+#### d) Active learning
+
+A subset of candidate pairs is presented to the user for validation (accept/reject) to improve the model, **typically before clustering and optionally after if confirmed by the user**.
+
+![Active Learning Process](https://i.ibb.co/XkZn64H/active-learning.png)
 
 ---
 
-![Complete Methodology Overview](https://i.ibb.co/2qGZ2TZ/complete-approach-methodology.png)
-
-## 4. API Architecture
+## 🏗 Pipeline Architecture
 
 ```text
-CSV Dataset (GCS)
+CSV Dataset
       ↓
 Data Cleaning (optional)
       ↓
 Blocking Predicates
       ↓
-Distance-based Similarity
+Similarity Computation
       ↓
-Supervised ML (Logistic Regression)
+Supervised Learning (Logistic Regression)
       ↓
-Duplicate Labeling
+Duplicate Classification
       ↓
 Agglomerative Clustering
       ↓
@@ -143,107 +218,109 @@ API JSON Response
 
 ---
 
-## 5. Prerequisites
+## 📊 Exploratory Data Analysis
 
-### General
+The platform provides diagnostics such as:
 
-- Python **3.8+**
-- pip
-- Access to MongoDB (for model metadata)
+* duplicate cluster distributions
+* blocking efficiency metrics
+* similarity score distributions
 
-### Ubuntu Example
+---
+
+
+## 🔧 Setup & Installation
+
+In this section we explain the minimum OS verification, python usage and docker setup.
+
+### 1. Requirements
+
+* Python 3.8+
+* Docker & Docker Compose
+* No GPU needed
+
+### 2. OS prerequists
+
+Verify that you have the necessairy packages installed.
+
+#### Windows / WSL2 (recommended)
+
+```bash
+# PowerShell
+wsl --status
+wsl --install
+wsl --list --online
+wsl --install -d Ubuntu
+wsl -d Ubuntu
+
+docker --version
+docker compose version
+```
+
+#### Ubuntu
 
 ```bash
 sudo apt update
-sudo apt install python python3-pip
+sudo apt install -y python3 python3-venv python3-pip build-essential curl git
 python --version
 ```
 
----
-
-## 6. Installation
-
-### Create Virtual Environment
+### 3. Python environment
 
 ```bash
-python -m venv .dedu_env
-source .dedu_env/bin/activate   ## for windows : .dedu_env\Scripts\activate.bat
-pip install --upgrade pip 		## for windows : .dedu_env\Scripts\python.exe -m pip install --upgrade pip
+python -m venv .icd10_env
+source .dedu_env/bin/activate    	## for windows : .dedu_env\Scripts\activate.bat
+pip install --upgrade pip        	## for windows : .dedu_env\Scripts\python.exe -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
+### 4. Docker setup
+
+```bash
+docker compose -f docker/docker-compose.yml build
+docker compose -f docker/docker-compose.yml up
+```
+
 ---
 
-## 7. API Usage
-
-### API Port
-
-```
-8080
-```
-
-### Train Model
+## ▶️ Usage & End-to-End Testing
 
 ```bash
-curl -X POST http://localhost:8080/train-model \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "gcs_path_file": "SELECT_1,9M.csv",
-    "trained_model_id": "best",
-    "confidence_threshold": 0.85,
-    "clean_data": true
-  }'
-```
 
-### Dataset Deduplication
+## Start API server
+uvicorn src.core.service:app --reload
 
-```bash
-curl -X POST http://localhost:8080/dataset-deduplication \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "gcs_path_file": "SELECT_1,9M.csv",
-    "trained_model_id": "best",
-    "confidence_filter": 0.85,
-    "show_statistics": false
-  }'
-```
+## Train model
+curl -X POST http://localhost:8080/train-model -H "Content-Type: application/json" -d '{"gcs_path_file":"SELECT_1,9M.csv","trained_model_id":"best","confidence_threshold":0.85,"clean_data":true}'
 
-### Record to Dataset Linkage
+## Dataset deduplication
+curl -X POST http://localhost:8080/dataset-deduplication -H "Content-Type: application/json" -d '{"gcs_path_file":"SELECT_1,9M.csv","trained_model_id":"best","confidence_filter":0.85,"show_statistics":false}'
 
-```bash
-curl -X POST http://localhost:8080/record-to-dataset-linkage \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "gcs_path_file": "SELECT_1,9M.csv",
-    "trained_model_id": "best",
-    "record_info": {
-      "family_name_list": ["NASSOPOULOS"],
-      "first_name_list": ["Georges"]
-    }
-  }'
-```
+## Record to dataset linkage
+curl -X POST http://localhost:8080/record-to-dataset-linkage -H "Content-Type: application/json" -d '{"gcs_path_file":"SELECT_1,9M.csv","trained_model_id":"best","record_info":{"family_name_list":["NASSOPOULOS"],"first_name_list":["Georges"]}}'
 
-### Get Models Info
-
-```bash
+## Get models info
 curl -X GET http://localhost:8080/get-models-info
+
+## Run tests
+pytest -q
 ```
 
 ---
 
-## 8. Errors and Exceptions
+## 📛 Errors and Exceptions
 
-Possible HTTP errors:
+| Error | Cause | Solution |
+|------|------|------|
+| 400 Bad Request | Invalid or malformed JSON payload | Verify request body format and required fields |
+| 401 Unauthorized | Missing or invalid authentication | Provide valid authentication credentials |
+| 404 Not Found | Requested resource or endpoint does not exist | Check API endpoint and request path |
+| 408 Timeout | Request processing exceeded time limit | Retry request or reduce dataset size |
+| 429 Too Many Requests | API rate limit exceeded | Wait before sending additional requests |
+| 503 Service Unavailable | API service temporarily unavailable | Verify server status and retry later |
+| 520 Unknown Error | Unexpected server-side error | Check server logs for more details |
 
-- 400 Bad Request
-- 401 Unauthorized
-- 404 Not Found
-- 408 Timeout
-- 429 Too Many Requests
-- 503 Service Unavailable
-- 520 Unknown Error
-
-Example error format:
+Example response:
 
 ```json
 {
@@ -257,89 +334,9 @@ Example error format:
 
 ---
 
-## 9. Tests
+## 👤 Author
 
-Run unit and integration tests:
+**Georges Nassopoulos**
+[georges.nassopoulos@gmail.com](mailto:georges.nassopoulos@gmail.com)
 
-```bash
-pytest -q
-```
-
----
-
-## ✅ Full System Verification (End-to-End)
-
-```bash
-# Activate environment
-source .dedu_env/bin/activate   ## for windows : .dedu_env\Scripts\activate.bat
-
-# Start API locally
-uvicorn src.core.service:app --reload
-
-# In another terminal, call endpoint
-curl http://localhost:8080/get-models-info
-
-# Run tests
-pytest -q
-```
-
----
-
-## 10. Project Organization
-
-```text
-.
-├── README.md                             ## Project overview, usage, API description
-├── requirements.txt                     ## Python dependencies
-├── .env                                 ## Environment variables (not committed)
-├── docker/                              ## Docker setup (image + compose)
-│   ├── Dockerfile
-│   └── docker-compose.yml
-├── menu_pipeline.sh                     ## CLI menu to trigger pipeline actions
-├── main.py                              ## Application entry point (API launcher)
-├── artifacts/                           ## Non-code assets (configs, examples)
-│   ├── config/                          ## API & data validation configuration
-│   │   ├── swagger.yaml
-│   │   └── data_control.json
-│   └── examples/                        ## Example API payloads
-│       ├── train_model_example_1.json
-│       ├── dataset_deduplication_example_2.json
-│       └── record_to_dataset_linkage_example_3.json
-├── data/                                ## Runtime and training data
-│   ├── raw/                             ## Raw input datasets
-│   │   ├── faker.csv / faker.json
-│   └── active_learning/                 ## Active learning persisted states
-│       ├── trained_model_config_1
-│       └── variables_predicates_weights_1
-├── logs/                                ## Runtime logs
-├── tests/                               ## Unit tests
-│   └── test_unit.py
-└── src/                                 ## Application source code
-    ├── core/                            ## Configuration, errors, API service
-    │   ├── __init__.py	
-    │   ├── config.py
-    │   ├── errors.py
-    │   ├── service.py
-    │   └── controls.py
-    ├── model/                           ## Deduplication, fuzzy logic, active learning
-    │   ├── __init__.py	
-    │   ├── cleaning.py
-    │   ├── fuzzy_analysis.py
-    │   ├── deduplication.py
-    │   └── active_learning.py
-    ├── utils/                           ## Shared helpers and logging
-    │   ├── __init__.py	
-    │   ├── utils.py
-    │   └── logging_utils.py
-    ├── __init__.py	
-    └── pipeline.py
-
-```
-
----
-
-## 11. Author
-
-Georges Nassopoulos
-
-Professional / Research Project
+**Status:** Fuzzy Analysis / Data Quality AI Project
