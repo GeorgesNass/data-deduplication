@@ -4,246 +4,292 @@ __copyright__ = None
 __version__ = "1.0.0"
 __email__ = "georges.nassopoulos@gmail.com"
 __status__ = "Dev"
-__desc__ = "Centralized logging utilities: consistent console/file handlers, formatting, and safe logger retrieval."
+__desc__ = "Generic logging utilities with sync/async execution-time decorator."
 '''
 
 from __future__ import annotations
 
-## Standard library imports
+import asyncio
+import functools
 import logging
 import os
-from logging.handlers import RotatingFileHandler
+import sys
+import time
+import traceback
 from pathlib import Path
-from typing import Optional
+from typing import Any, Callable
 
 ## ============================================================
-## CONSTANTS
+## LOG DIRECTORY MANAGEMENT
 ## ============================================================
-DEFAULT_LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
-DEFAULT_LOG_DIRNAME = os.getenv("LOG_DIR", "logs")
-DEFAULT_LOG_FILENAME = os.getenv("LOG_FILE", "app.log")
+def _ensure_log_dir(
+    log_dir: str | Path | None = None,
 
-DEFAULT_MAX_BYTES = int(os.getenv("LOG_MAX_BYTES", "5242880"))  ## 5 MB
-DEFAULT_BACKUP_COUNT = int(os.getenv("LOG_BACKUP_COUNT", "5"))
-
-DEFAULT_LOG_FORMAT = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
-DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
-
-## ============================================================
-## INTERNAL HELPERS
-## ============================================================
-def _resolve_log_dir(log_dir: str | Path | None = None) -> Path:
+    ## Dummy parameter for backward compatibility
+    logs_dir: str | Path | None = None,
+) -> Path:
     """
-        Resolve and create the log directory
+        Ensure the log directory exists
 
         Args:
-            log_dir: Optional explicit directory path
+            log_dir: Optional custom log directory
 
         Returns:
-            A Path to an existing directory
+            Path to the log directory
     """
-    
-    ## Use default if not provided
-    log_dir_path = Path(DEFAULT_LOG_DIRNAME) if log_dir is None else Path(log_dir)
 
-    ## Ensure directory exists
-    log_dir_path.mkdir(parents=True, exist_ok=True)
-    
-    return log_dir_path.resolve()
+    ## Resolve compatibility alias for legacy parameter
+    if logs_dir and not log_dir:
+        log_dir = logs_dir
 
-def _parse_log_level(level: str | int | None) -> int:
-    """
-        Parse a log level into a logging integer
+    ## Resolve log directory from argument or environment
+    resolved_dir = Path(log_dir or os.getenv("LOG_DIR", "logs"))
 
-        Args:
-            level: Log level name (INFO, DEBUG) or logging int
+    ## Create directory if it does not exist
+    resolved_dir.mkdir(parents=True, exist_ok=True)
 
-        Returns:
-            A valid logging level integer
-    """
-    
-    ## Default level from env
-    if level is None:
-        return logging._nameToLevel.get(DEFAULT_LOG_LEVEL, logging.INFO)
-
-    ## Integer level provided
-    if isinstance(level, int):
-        return int(level)
-
-    ## String level provided
-    normalized = str(level).upper().strip()
-    
-    return logging._nameToLevel.get(normalized, logging.INFO)
-
-def _build_formatter() -> logging.Formatter:
-    """
-        Build the default formatter
-
-        Returns:
-            A configured logging.Formatter
-    """
-    
-    return logging.Formatter(fmt=DEFAULT_LOG_FORMAT, datefmt=DEFAULT_DATE_FORMAT)
-
-def _has_handler_type(logger: logging.Logger, handler_type: type) -> bool:
-    """
-        Check whether a logger already has a handler of a given type
-
-        Args:
-            logger: Logger instance
-            handler_type: Handler class
-
-        Returns:
-            True if at least one handler matches
-    """
-    
-    return any(isinstance(h, handler_type) for h in logger.handlers)
-
-def _has_rotating_file_for_path(logger: logging.Logger, target_path: Path) -> bool:
-    """
-        Check whether a logger already has a RotatingFileHandler targeting a given file
-
-        Args:
-            logger: Logger instance
-            target_path: Target log file path
-
-        Returns:
-            True if a matching RotatingFileHandler exists
-    """
-    
-    target = str(target_path.resolve())
-    
-    for h in logger.handlers:
-        if isinstance(h, RotatingFileHandler) and getattr(h, "baseFilename", None) == target:
-            return True
-    
-    return False
-
-def _ensure_console_handler(logger: logging.Logger, level: int) -> None:
-    """
-        Ensure a single StreamHandler is attached to the logger
-
-        Args:
-            logger: Logger instance
-            level: Logger/handler level
-    """
-    
-    ## Prevent duplicates
-    if _has_handler_type(logger, logging.StreamHandler):
-        return
-
-    ## Attach stream handler
-    handler = logging.StreamHandler()
-    handler.setLevel(level)
-    handler.setFormatter(_build_formatter())
-    logger.addHandler(handler)
-
-def _ensure_file_handler(
-    logger: logging.Logger,
-    log_dir: Path,
-    filename: str,
-    level: int,
-    max_bytes: int,
-    backup_count: int,
-) -> None:
-    """
-        Ensure a single rotating file handler is attached to the logger
-
-        Args:
-            logger: Logger instance
-            log_dir: Existing directory for log file
-            filename: Log filename
-            level: Logger/handler level
-            max_bytes: Max file size before rotation
-            backup_count: Number of backups to keep
-    """
-    
-    ## Build log path
-    log_path = (log_dir / filename).resolve()
-
-    ## Prevent duplicates for the same file
-    if _has_rotating_file_for_path(logger, log_path):
-        return
-
-    ## Attach rotating file handler
-    handler = RotatingFileHandler(
-        filename=str(log_path),
-        maxBytes=max_bytes,
-        backupCount=backup_count,
-        encoding="utf-8",
-    )
-    handler.setLevel(level)
-    handler.setFormatter(_build_formatter())
-    logger.addHandler(handler)
+    return resolved_dir
 
 ## ============================================================
-## PUBLIC API
+## LOGGER FACTORY
 ## ============================================================
 def get_logger(
-    name: str,
-    level: str | int | None = None,
+    name: str = "app",
+    log_file: str | None = None,
     log_dir: str | Path | None = None,
-    filename: Optional[str] = None,
-    enable_file: bool = True,
-    enable_console: bool = True,
-    propagate: bool = False,
-    max_bytes: Optional[int] = None,
-    backup_count: Optional[int] = None,
-    clear_handlers: bool = False,
+
+    ## Dummy parameters for backward compatibility (absorbing legacy kwargs)
+    level: str | None = None,
+    logs_dir: str | Path | None = None,
+    log_filename: str | None = None,
+    filename: str | None = None,
+    enable_file: bool | None = None,
+    enable_console: bool | None = None,
+    propagate: bool | None = None,
 ) -> logging.Logger:
     """
-        Get a configured logger with consistent handlers and formatting
+        Build and configure a logger
 
-        Design goals:
-            - Idempotent: calling get_logger multiple times does not duplicate handlers
-            - Safe defaults: console + rotating file handler (unless disabled)
-            - Test-friendly: optional clear_handlers to avoid pytest duplication
+        Behavior:
+            - console logging
+            - file logging
+            - environment driven configuration
 
         Args:
-            name: Logger name (namespace)
-            level: Log level (string like INFO/DEBUG or int)
-            log_dir: Directory where logs are written (default: ./logs)
-            filename: Log filename (default: app.log)
-            enable_file: If True, attach a rotating file handler
-            enable_console: If True, attach a console (stream) handler
-            propagate: Whether to propagate to parent loggers
-            max_bytes: Rotating file max size (bytes)
-            backup_count: Rotating file backup count
-            clear_handlers: If True, remove existing handlers before attaching new ones
+            name: Logger name
+            log_file: Optional log filename
+            log_dir: Optional log directory
 
         Returns:
-            A configured logging.Logger instance
+            Configured logger
     """
-    
-    ## Resolve final config values
-    resolved_level = _parse_log_level(level)
-    resolved_filename = filename or DEFAULT_LOG_FILENAME
-    resolved_max_bytes = max_bytes if max_bytes is not None else DEFAULT_MAX_BYTES
-    resolved_backup_count = backup_count if backup_count is not None else DEFAULT_BACKUP_COUNT
 
-    ## Get logger instance
+    ## Resolve compatibility aliases for legacy parameters
+    if logs_dir and not log_dir:
+        log_dir = logs_dir
+
+    if log_filename and not log_file:
+        log_file = log_filename
+
+    if filename and not log_file:
+        log_file = filename
+
+    ## Resolve logging level from environment
+    level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+    level = getattr(logging, level_name, logging.INFO)
+
+    ## Create or retrieve logger instance
     logger = logging.getLogger(name)
-    logger.setLevel(resolved_level)
-    logger.propagate = propagate
+    logger.setLevel(level)
 
-    ## Optional cleanup (useful for tests / hot reload)
-    if clear_handlers:
-        logger.handlers.clear()
+    ## Prevent logs from propagating to root logger
+    logger.propagate = False
+
+    ## Avoid duplicate handlers if logger already configured
+    if logger.handlers:
+        return logger
+
+    ## Define standard log format including function name
+    formatter = logging.Formatter(
+        "%(asctime)s | %(levelname)s | %(name)s | %(funcName)s | %(message)s"
+    )
+
+    ## Create console handler
+    console_handler = logging.StreamHandler(sys.stdout)
+
+    ## Apply log level to console
+    console_handler.setLevel(level)
+
+    ## Apply formatter
+    console_handler.setFormatter(formatter)
 
     ## Attach console handler
-    if enable_console:
-        _ensure_console_handler(logger, resolved_level)
+    logger.addHandler(console_handler)
 
-    ## Attach file handler
-    if enable_file:
-        resolved_log_dir = _resolve_log_dir(log_dir)
-        _ensure_file_handler(
-            logger=logger,
-            log_dir=resolved_log_dir,
-            filename=resolved_filename,
-            level=resolved_level,
-            max_bytes=resolved_max_bytes,
-            backup_count=resolved_backup_count,
+    ## Enable file logging depending on environment variable
+    if os.getenv("LOG_TO_FILE", "true").lower() == "true":
+
+        ## Resolve log directory
+        log_dir_path = _ensure_log_dir(log_dir)
+
+        ## Determine log filename
+        if log_file:
+            filename = log_file
+        else:
+            safe_name = name.replace(".", "_")
+            filename = f"{safe_name}.log"
+
+        ## Create file handler
+        file_handler = logging.FileHandler(
+            log_dir_path / filename,
+            encoding="utf-8",
         )
 
+        ## Apply log level
+        file_handler.setLevel(level)
+
+        ## Apply formatter
+        file_handler.setFormatter(formatter)
+
+        ## Attach file handler
+        logger.addHandler(file_handler)
+
     return logger
+    
+## ============================================================
+## UTILITY FUNCTION
+## ===========================================================
+def get_absolute_path(path_like: str | Path | None = None) -> str:
+    """
+        Return absolute path
+
+        Args:
+            path_like: Optional path
+
+        Returns:
+            Absolute path string
+    """
+
+    ## Resolve target path
+    target = Path(path_like) if path_like else Path.cwd()
+
+    ## Convert to absolute path
+    return str(target.resolve())
+
+## ============================================================
+## EXECUTION TIME DECORATOR
+## ============================================================
+def log_execution_time_and_path(
+    func: Callable[..., Any],
+) -> Callable[..., Any]:
+    """
+        Log execution time of sync or async functions
+
+        Args:
+            func: Function to decorate
+
+        Returns:
+            Wrapped function
+    """
+
+    ## Create logger based on module name
+    logger = get_logger(func.__module__)
+
+    ## Detect async functions
+    if asyncio.iscoroutinefunction(func):
+
+        @functools.wraps(func)
+        async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+
+            ## Record start time
+            start_time = time.perf_counter()
+
+            try:
+
+                ## Execute async function
+                result = await func(*args, **kwargs)
+
+                ## Compute execution time
+                elapsed = time.perf_counter() - start_time
+
+                ## Log execution information
+                logger.info(
+                    "Function '%s' executed in %.4fs | path=%s",
+                    func.__name__,
+                    elapsed,
+                    get_absolute_path(),
+                )
+
+                return result
+
+            except Exception as error:
+
+                ## Log error
+                logger.error(
+                    "Function '%s' failed: %s",
+                    func.__name__,
+                    error,
+                )
+
+                ## Print traceback if debug enabled
+                if os.getenv("DEBUG", "false").lower() == "true":
+                    logger.debug(traceback.format_exc())
+
+                raise
+
+        return async_wrapper
+
+    ## Sync function wrapper
+    @functools.wraps(func)
+    def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
+
+        ## Record start time
+        start_time = time.perf_counter()
+
+        try:
+
+            ## Execute function
+            result = func(*args, **kwargs)
+
+            ## Compute execution time
+            elapsed = time.perf_counter() - start_time
+
+            ## Log execution information
+            logger.info(
+                "Function '%s' executed in %.4fs | path=%s",
+                func.__name__,
+                elapsed,
+                get_absolute_path(),
+            )
+
+            return result
+
+        except Exception as error:
+
+            ## Log error
+            logger.error(
+                "Function '%s' failed: %s",
+                func.__name__,
+                error,
+            )
+
+            ## Print traceback if debug enabled
+            if os.getenv("DEBUG", "false").lower() == "true":
+                logger.debug(traceback.format_exc())
+
+            raise
+
+    return sync_wrapper
+
+## ============================================================
+## BACKWARD COMPATIBILITY
+## ============================================================
+def log_execution_time(
+    func: Callable[..., Any],
+) -> Callable[..., Any]:
+    """
+        Alias for execution time decorator
+    """
+
+    ## Reuse main decorator
+    return log_execution_time_and_path(func)
