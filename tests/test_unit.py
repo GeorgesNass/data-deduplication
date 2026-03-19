@@ -18,14 +18,15 @@ import pytest
 from fastapi.testclient import TestClient
 
 ## Local imports
+from src import pipeline
 from src.core.controls import build_error_response, build_success_response, safe_run
 from src.core.errors import ApplicationError, ValidationError
-from src.core.service import app as fastapi_app
 from src.core.schema import (
     DatasetDeduplicationPayload,
     RecordLinkagePayload,
     TrainModelPayload,
 )
+from src.core.service import app as fastapi_app
 from src.model import active_learning
 from src.model.active_learning import load_active_learning_model, save_active_learning_model
 from src.model.cleaning import (
@@ -35,8 +36,6 @@ from src.model.cleaning import (
     parse_nested_list,
 )
 from src.pipeline import run_pipeline
-from src import pipeline
-
 
 ## ============================================================
 ## FIXTURES
@@ -51,7 +50,6 @@ def client() -> TestClient:
     """
 
     return TestClient(fastapi_app)
-
 
 ## ============================================================
 ## CORE.ERRORS TESTS
@@ -78,7 +76,6 @@ def test_application_error_to_dict() -> None:
     assert payload["message"] == "Something went wrong"
     assert payload["details"] == "details here"
 
-
 def test_validation_error_defaults() -> None:
     """
         ValidationError should use code 400 and VALIDATION_ERROR type
@@ -91,7 +88,6 @@ def test_validation_error_defaults() -> None:
 
     assert err.code == "400"
     assert err.error_type == "VALIDATION_ERROR"
-
 
 ## ============================================================
 ## CORE.CONTROLS TESTS
@@ -109,7 +105,6 @@ def test_build_success_response() -> None:
     assert payload["code"] == "200"
     assert payload["type"] == "SUCCESS"
     assert payload["data"]["x"] == 1
-
 
 def test_build_error_response() -> None:
     """
@@ -130,7 +125,6 @@ def test_build_error_response() -> None:
     assert payload["type"] == "VALIDATION_ERROR"
     assert payload["details"] == "missing field"
 
-
 def test_safe_run_success() -> None:
     """
         safe_run should return handler output when no exception occurs
@@ -141,13 +135,13 @@ def test_safe_run_success() -> None:
 
     def handler(x: int) -> Dict[str, Any]:
         """
-            Dummy handler
+            Build a simple payload for safe_run success path
 
             Args:
-                x: Integer
+                x: Integer input value
 
             Returns:
-                Dict containing x
+                Dictionary containing x
         """
 
         return {"x": x}
@@ -155,7 +149,6 @@ def test_safe_run_success() -> None:
     result = safe_run(handler, 10)
 
     assert result["x"] == 10
-
 
 def test_safe_run_validation_error() -> None:
     """
@@ -167,10 +160,13 @@ def test_safe_run_validation_error() -> None:
 
     def handler() -> Dict[str, Any]:
         """
-            Dummy handler raising ValidationError
+            Raise a validation error for safe_run testing
 
-        Raises:
-            ValidationError: Always
+            Raises:
+                ValidationError: Always raised in this test helper
+
+            Returns:
+                Never returns
         """
 
         raise ValidationError(message="Invalid input")
@@ -180,6 +176,30 @@ def test_safe_run_validation_error() -> None:
     assert result["code"] == "400"
     assert result["type"] == "VALIDATION_ERROR"
 
+def test_safe_run_unexpected_error() -> None:
+    """
+        safe_run should handle unexpected exceptions
+
+        Returns:
+            None
+    """
+
+    def handler() -> Dict[str, Any]:
+        """
+            Raise an unexpected runtime error for safe_run testing
+
+            Raises:
+                RuntimeError: Always raised in this test helper
+
+            Returns:
+                Never returns
+        """
+
+        raise RuntimeError("boom")
+
+    result = safe_run(handler)
+
+    assert result["code"] in {"500", 500}
 
 ## ============================================================
 ## SCHEMA (PYDANTIC) TESTS
@@ -197,7 +217,6 @@ def test_train_model_payload_validation() -> None:
     assert payload.model_id == 1
     assert payload.encoding == "utf-8"
 
-
 def test_dataset_deduplication_payload_defaults() -> None:
     """
         DatasetDeduplicationPayload should set defaults correctly
@@ -207,9 +226,9 @@ def test_dataset_deduplication_payload_defaults() -> None:
     """
 
     payload = DatasetDeduplicationPayload(model_id=1)
+
     assert payload.cluster_threshold == 0.5
     assert payload.num_processes == 1
-
 
 def test_record_linkage_payload_requires_names() -> None:
     """
@@ -230,7 +249,6 @@ def test_record_linkage_payload_requires_names() -> None:
     assert payload.model_id == 1
     assert payload.record_info.family_name_list == ["Doe"]
 
-
 ## ============================================================
 ## MODEL.CLEANING TESTS
 ## ============================================================
@@ -244,6 +262,15 @@ def test_normalize_text_basic() -> None:
 
     assert normalize_text("ÉLÈVE  ") == "eleve"
 
+def test_normalize_text_empty() -> None:
+    """
+        normalize_text should handle empty input
+
+        Returns:
+            None
+    """
+
+    assert normalize_text("") == ""
 
 def test_parse_nested_list() -> None:
     """
@@ -259,7 +286,6 @@ def test_parse_nested_list() -> None:
     assert "doe" in result
     assert len(result) == 2
 
-
 def test_enrich_emails() -> None:
     """
         enrich_emails should add local-part tokens
@@ -274,6 +300,15 @@ def test_enrich_emails() -> None:
     assert "john.doe@gmail.com" in enriched
     assert "john.doe" in enriched
 
+def test_enrich_emails_empty() -> None:
+    """
+        enrich_emails should handle empty list
+
+        Returns:
+            None
+    """
+
+    assert enrich_emails([]) == []
 
 def test_normalize_birth_date() -> None:
     """
@@ -285,11 +320,13 @@ def test_normalize_birth_date() -> None:
 
     assert normalize_birth_date("1990-01-01 00:00:00") == "1990-01-01"
 
-
 ## ============================================================
 ## MODEL.ACTIVE_LEARNING TESTS
 ## ============================================================
-def test_active_learning_save_and_load(tmp_path: Path, monkeypatch) -> None:
+def test_active_learning_save_and_load(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """
         Active learning model should be saved and reloaded correctly
 
@@ -311,7 +348,6 @@ def test_active_learning_save_and_load(tmp_path: Path, monkeypatch) -> None:
 
     assert loaded == payload
 
-
 ## ============================================================
 ## PIPELINE TESTS
 ## ============================================================
@@ -327,8 +363,21 @@ def test_run_pipeline_unknown_function() -> None:
 
     assert result["code"] == "404"
 
+def test_run_pipeline_none_payload() -> None:
+    """
+        Pipeline should handle None payload
 
-def test_run_pipeline_mocked_handler(monkeypatch) -> None:
+        Returns:
+            None
+    """
+
+    result = run_pipeline("unknownFunction", payload=None)
+
+    assert "code" in result
+
+def test_run_pipeline_mocked_handler(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """
         Pipeline should route to mocked handler correctly
 
@@ -341,10 +390,13 @@ def test_run_pipeline_mocked_handler(monkeypatch) -> None:
 
     def fake_handler(_: Any) -> Dict[str, Any]:
         """
-            Fake handler avoiding heavy logic
+            Return a fake pipeline result without heavy processing
+
+            Args:
+                _: Ignored payload
 
             Returns:
-                Dict with a marker flag
+                Dictionary with a fake marker
         """
 
         return {"fake": True}
@@ -360,11 +412,13 @@ def test_run_pipeline_mocked_handler(monkeypatch) -> None:
     assert result["code"] == "200"
     assert result["data"]["result"]["fake"] is True
 
-
 ## ============================================================
 ## SERVICE (FASTAPI) TESTS
 ## ============================================================
-def test_get_models_info_endpoint(client: TestClient, monkeypatch) -> None:
+def test_get_models_info_endpoint(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """
         GET /get-models-info should return a standardized response
 
@@ -378,10 +432,13 @@ def test_get_models_info_endpoint(client: TestClient, monkeypatch) -> None:
 
     def fake_handler(_: Any) -> Dict[str, Any]:
         """
-            Fake models info handler
+            Return fake model information payload
+
+            Args:
+                _: Ignored payload
 
             Returns:
-                Dict with fake state
+                Dictionary with fake model state
         """
 
         return {"model_id": 1, "state": {"ok": True}}
@@ -401,8 +458,10 @@ def test_get_models_info_endpoint(client: TestClient, monkeypatch) -> None:
     assert payload["code"] == "200"
     assert payload["type"] == "SUCCESS"
 
-
-def test_dataset_deduplication_endpoint(client: TestClient, monkeypatch) -> None:
+def test_dataset_deduplication_endpoint(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """
         POST /dataset-deduplication should validate payload and return a response
 
@@ -416,10 +475,13 @@ def test_dataset_deduplication_endpoint(client: TestClient, monkeypatch) -> None
 
     def fake_handler(_: Any) -> Dict[str, Any]:
         """
-            Fake deduplication handler
+            Return fake deduplication clusters payload
+
+            Args:
+                _: Ignored payload
 
             Returns:
-                Dict with fake clusters
+                Dictionary with fake clusters
         """
 
         return {"clusters": [{"id": 1, "members": [1, 2]}]}
@@ -434,8 +496,25 @@ def test_dataset_deduplication_endpoint(client: TestClient, monkeypatch) -> None
         "/dataset-deduplication",
         json={"model_id": 1},
     )
+
     assert response.status_code == 200
 
     payload = response.json()
+
     assert payload["code"] == "200"
     assert payload["type"] == "SUCCESS"
+
+def test_dataset_deduplication_invalid_payload(client: TestClient) -> None:
+    """
+        Endpoint should reject invalid payload
+
+        Args:
+            client: FastAPI TestClient
+
+        Returns:
+            None
+    """
+
+    response = client.post("/dataset-deduplication", json={})
+
+    assert response.status_code in {400, 422}

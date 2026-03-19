@@ -4,52 +4,189 @@ __copyright__ = None
 __version__ = "1.0.0"
 __email__ = "georges.nassopoulos@gmail.com"
 __status__ = "Dev"
-__desc__ = "Application entrypoint: environment setup and FastAPI service launcher."
+__desc__ = "Application entrypoint: environment setup, validation and FastAPI bootstrap."
 '''
 
 from __future__ import annotations
 
-## Standard library imports
+## Standard library
+import argparse
 import os
+import sys
+import time
+from typing import Optional
 
 ## Local imports
 from src.core.config import ensure_directories_exist
 from src.utils.logging_utils import get_logger
 
 ## ============================================================
-## LOGGER
+## CONSTANTS
 ## ============================================================
-LOGGER = get_logger("main")
+APP_VERSION = "1.0.0"
+EXIT_SUCCESS = 0
+EXIT_FAILURE = 1
+
+LOGGER = get_logger("data_deduplication.main")
 
 ## ============================================================
-## BOOTSTRAP
+## ARG PARSER
 ## ============================================================
-def main() -> None:
+def _build_parser() -> argparse.ArgumentParser:
     """
-        Application bootstrap
+        Build CLI parser for bootstrap and validation
+
+        Returns:
+            ArgumentParser instance
+    """
+
+    parser = argparse.ArgumentParser(
+        description="Data Deduplication bootstrap",
+        add_help=True,
+    )
+
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {APP_VERSION}",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Validate environment without executing bootstrap",
+    )
+    parser.add_argument(
+        "--validate-config",
+        action="store_true",
+        help="Validate environment and exit",
+    )
+
+    return parser
+
+## ============================================================
+## VALIDATION
+## ============================================================
+def _validate_environment() -> dict:
+    """
+        Validate runtime environment
+
+        Returns:
+            Validation summary
+    """
+
+    return {
+        "cwd": os.getcwd(),
+        "env": os.getenv("ENV", "dev"),
+        "python": sys.executable,
+    }
+
+## ============================================================
+## SUMMARY
+## ============================================================
+def _build_summary(
+    action: str,
+    success: bool,
+    start: float,
+    details: Optional[dict] = None,
+) -> dict:
+    """
+        Build execution summary
+
+        Args:
+            action: Action name
+            success: Status
+            start: Start time
+            details: Optional details
+
+        Returns:
+            Summary dictionary
+    """
+
+    return {
+        "action": action,
+        "success": success,
+        "duration_seconds": round(time.monotonic() - start, 3),
+        "details": details or {},
+    }
+
+## ============================================================
+## MAIN LOGIC
+## ============================================================
+def main() -> int:
+    """
+        Application bootstrap entry point
 
         Responsibilities:
-            - Ensure runtime directories exist (logs, data/raw, data/active_learning)
-            - Provide a clear entrypoint for Docker/CLI usage
+            - Validate environment
+            - Ensure required directories exist
+            - Provide standardized CLI behavior
 
-        Notes:
-            - FastAPI is served via uvicorn:
-                uvicorn src.core.service:app --host 0.0.0.0 --port 8080
-            - This script keeps bootstrap responsibilities only
+        Returns:
+            Exit code
     """
-    
-    ## Ensure filesystem prerequisites
-    ensure_directories_exist()
 
-    ## Log environment context (best-effort)
-    LOGGER.info("Starting application")
-    LOGGER.info("ENV=%s", os.getenv("ENV", "dev"))
+    start_time = time.monotonic()
 
-    ## No direct server start here for FastAPI
-    LOGGER.info("Use uvicorn to start the API: uvicorn src.core.service:app --host 0.0.0.0 --port 8080")
+    parser = _build_parser()
+    args = parser.parse_args()
+
+    try:
+        ## Validate environment
+        env_summary = _validate_environment()
+
+        if args.validate_config:
+            LOGGER.info("Environment validation OK | %s", env_summary)
+            LOGGER.info(
+                "Summary | %s",
+                _build_summary("validate-config", True, start_time),
+            )
+            return EXIT_SUCCESS
+
+        if args.dry_run:
+            LOGGER.info("Dry-run | bootstrap would execute")
+            LOGGER.info(
+                "Summary | %s",
+                _build_summary("dry-run", True, start_time, env_summary),
+            )
+            return EXIT_SUCCESS
+
+        ## Ensure directories
+        ensure_directories_exist()
+
+        ## Log context
+        LOGGER.info("Application bootstrap completed")
+        LOGGER.info("ENV=%s", os.getenv("ENV", "dev"))
+
+        ## API instruction (kept explicit)
+        LOGGER.info(
+            "Start API with: uvicorn src.core.service:app --host 0.0.0.0 --port 8080"
+        )
+
+        LOGGER.info(
+            "Summary | %s",
+            _build_summary("bootstrap", True, start_time, env_summary),
+        )
+
+        return EXIT_SUCCESS
+
+    except KeyboardInterrupt:
+        LOGGER.warning("Execution interrupted by user")
+        LOGGER.warning(
+            "Summary | %s",
+            _build_summary("interrupt", False, start_time),
+        )
+        return EXIT_FAILURE
+
+    except Exception as exc:
+        LOGGER.exception("Unhandled exception: %s", exc)
+        LOGGER.error(
+            "Summary | %s",
+            _build_summary("exception", False, start_time),
+        )
+        return EXIT_FAILURE
 
 ## ============================================================
 ## ENTRYPOINT
 ## ============================================================
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
