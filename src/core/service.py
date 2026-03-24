@@ -13,11 +13,24 @@ from __future__ import annotations
 from typing import Optional
 
 ## Third-party imports
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import Response
 from fastapi.responses import JSONResponse
+from fastapi.security import OAuth2PasswordBearer
+
+## JWT / SECURITY IMPORTS
+from core.auth import (
+    login_user,
+    refresh_access_token,
+    logout_user,
+    get_current_active_user,
+)
+from core.security import (
+    JWTMiddleware,
+    require_roles,
+)
 
 ## Local imports
 from src.core.config import load_swagger_config_path
@@ -34,6 +47,19 @@ from src.utils.logging_utils import get_logger
 ## ============================================================
 LOGGER = get_logger("core.service")
 
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+
+## Fake DB (TO REPLACE)
+fake_db = {
+    "admin": {
+        "username": "admin",
+        "hashed_password": "$2b$12$examplehash",
+        "roles": ["admin"],
+        "scopes": ["all"],
+        "is_active": True,
+    }
+}
+
 ## ============================================================
 ## APP FACTORY
 ## ============================================================
@@ -41,14 +67,8 @@ def create_app() -> FastAPI:
     """
         Create and configure the FastAPI application
 
-        High-level workflow:
-            1) Configure FastAPI instance (disable built-in docs)
-            2) Add CORS middleware
-            3) Serve external swagger.yaml for documentation
-            4) Register business routes using Pydantic payloads
-
         Returns:
-            Configured FastAPI app instance
+            FastAPI app
     """
     
     app = FastAPI(
@@ -58,7 +78,7 @@ def create_app() -> FastAPI:
         openapi_url=None,
     )
 
-    ## CORS
+    ## MIDDLEWARE CORS
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -66,7 +86,53 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    ## Swagger UI (external swagger.yaml)
+    ## JWT middleware
+    app.add_middleware(JWTMiddleware)
+
+    ## AUTH ENDPOINTS
+    @app.post("/login")
+    async def login(data: dict):
+        """
+            Authenticate user and return tokens
+
+            Args:
+                data: username/password
+
+            Returns:
+                JWT tokens
+        """
+        ## Login
+        return login_user(data["username"], data["password"], fake_db)
+
+    @app.post("/refresh")
+    async def refresh(data: dict):
+        """
+            Refresh access token
+
+            Args:
+                data: refresh_token
+
+            Returns:
+                New tokens
+        """
+        return refresh_access_token(data["refresh_token"])
+
+    @app.post("/logout")
+    async def logout(token: str = Depends(oauth2_scheme)):
+        """
+            Logout user
+
+            Args:
+                token: JWT token
+
+            Returns:
+                Status
+        """
+        
+        logout_user(token)
+        return {"status": "logged_out"}
+
+    ## SWAGGER
     swagger_path = load_swagger_config_path()
 
     if swagger_path.exists():
@@ -74,12 +140,13 @@ def create_app() -> FastAPI:
         @app.get("/api/doc", include_in_schema=False)
         async def swagger_ui() -> Response:
             """
-                Serve Swagger UI pointing to the external OpenAPI YAML
+                Serve Swagger UI
 
                 Returns:
-                    Swagger UI HTML
+                    HTML response
             """
             
+            ## Serve Swagger UI
             return get_swagger_ui_html(
                 openapi_url="/api/openapi.yaml",
                 title="API documentation",
@@ -88,89 +155,104 @@ def create_app() -> FastAPI:
         @app.get("/api/openapi.yaml", include_in_schema=False)
         async def openapi_yaml() -> Response:
             """
-                Serve the external swagger.yaml as the OpenAPI specification
+                Serve OpenAPI YAML
 
                 Returns:
-                    YAML content as HTTP response
+                    YAML response
             """
             
+            ## Read YAML
             content = swagger_path.read_text(encoding="utf-8")
-            
+
             return Response(content=content, media_type="application/yaml")
 
     else:
         LOGGER.warning("Swagger config not found: %s", swagger_path)
 
-    ## ROUTES (Pydantic-validated)
+    ## ROUTES
     @app.post("/train-model")
-    async def train_model(payload: TrainModelPayload) -> JSONResponse:
+    async def train_model(
+        payload: TrainModelPayload,
+        user=Depends(require_roles(["admin"])),
+    ) -> JSONResponse:
         """
-            Train model artifacts (train-on-demand compatible)
+            Train model
 
             Args:
-                payload: Validated training payload
+                payload: Training payload
+                user: Authenticated user
 
             Returns:
-                Standardized API response
+                API response
         """
-        
+
         result = run_pipeline("trainModel", payload.model_dump())
-        
+
         return JSONResponse(content=result)
 
     @app.post("/dataset-deduplication")
-    async def dataset_deduplication(payload: DatasetDeduplicationPayload) -> JSONResponse:
+    async def dataset_deduplication(
+        payload: DatasetDeduplicationPayload,
+        user=Depends(get_current_active_user),
+    ) -> JSONResponse:
         """
-            Run dataset deduplication and clustering
+            Run dataset deduplication
 
             Args:
-                payload: Validated deduplication payload
+                payload: Deduplication payload
+                user: Authenticated user
 
             Returns:
-                Standardized API response
+                API response
         """
-        
+
         result = run_pipeline("datasetDeduplicationCluster", payload.model_dump())
-        
+
         return JSONResponse(content=result)
 
     @app.post("/record-to-dataset-linkage")
-    async def record_to_dataset_linkage(payload: RecordLinkagePayload) -> JSONResponse:
+    async def record_to_dataset_linkage(
+        payload: RecordLinkagePayload,
+        user=Depends(get_current_active_user),
+    ) -> JSONResponse:
         """
-            Link a single record to an existing dataset
+            Link record to dataset
 
             Args:
-                payload: Validated linkage payload
+                payload: Linkage payload
+                user: Authenticated user
 
             Returns:
-                Standardized API response
+                API response
         """
         
         result = run_pipeline("recordDatasetLinkage", payload.model_dump())
-        
+
         return JSONResponse(content=result)
 
     @app.get("/get-models-info")
     async def get_models_info(
-        model_id: Optional[int] = Query(default=1, description="Optional model identifier"),
+        model_id: Optional[int] = Query(default=1),
+        user=Depends(get_current_active_user),
     ) -> JSONResponse:
         """
-            Get meta info about persisted active learning artifacts
+            Get model info
 
             Args:
-                model_id: Optional model identifier
+                model_id: Model identifier
+                user: Authenticated user
 
             Returns:
-                Standardized API response
+                API response
         """
         
         result = run_pipeline("getModelsInfo", {"model_id": model_id})
-        
+
         return JSONResponse(content=result)
 
     return app
 
 ## ============================================================
-## ASGI APP (uvicorn entrypoint)
+## ASGI APP
 ## ============================================================
 app = create_app()

@@ -69,6 +69,8 @@ Main capabilities:
     ├── pipeline.py                        ## Pipeline orchestration
     │
     ├── core/
+    │   ├── auth.py                        ## JWT auth: tokens, login, refresh, dependencies
+    │   ├── security.py                    ## RBAC, middleware, permissions, request security		
     │   ├── config.py                      ## Configuration management
     │   ├── errors.py                      ## Custom exceptions
     │   ├── service.py                     ## FastAPI routes
