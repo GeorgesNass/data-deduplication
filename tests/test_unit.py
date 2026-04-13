@@ -19,6 +19,7 @@ from fastapi.testclient import TestClient
 
 ## Local imports
 from src import pipeline
+from src.core.data_consistency import run_data_consistency
 from src.core.controls import build_error_response, build_success_response, safe_run
 from src.core.errors import ApplicationError, ValidationError
 from src.core.schema import (
@@ -518,3 +519,79 @@ def test_dataset_deduplication_invalid_payload(client: TestClient) -> None:
     response = client.post("/dataset-deduplication", json={})
 
     assert response.status_code in {400, 422}
+    
+## ============================================================
+## DATA CONSISTENCY (DEDUP)
+## ============================================================
+def test_data_consistency_valid() -> None:
+    """
+        Validate correct dataset
+
+        Returns:
+            None
+    """
+
+    data = {
+        "records": [
+            {"text": "hello"},
+            {"text": "world"},
+        ],
+        "similarity_threshold": 0.8,
+    }
+
+    result = run_data_consistency(data=data)
+
+    assert result["is_consistent"] is True
+
+def test_data_consistency_empty_dataset() -> None:
+    """
+        Detect empty dataset
+
+        Returns:
+            None
+    """
+
+    data = {
+        "records": [],
+    }
+
+    result = run_data_consistency(data=data)
+
+    assert result["is_consistent"] is False
+
+def test_data_consistency_invalid_text() -> None:
+    """
+        Detect invalid text
+
+        Returns:
+            None
+    """
+
+    data = {
+        "records": [
+            {"text": ""},
+        ],
+    }
+
+    result = run_data_consistency(data=data)
+
+    assert result["is_consistent"] is False
+
+def test_data_consistency_invalid_threshold() -> None:
+    """
+        Detect invalid threshold
+
+        Returns:
+            None
+    """
+
+    data = {
+        "records": [
+            {"text": "hello"},
+        ],
+        "similarity_threshold": 2,
+    }
+
+    result = run_data_consistency(data=data)
+
+    assert result["is_consistent"] is False

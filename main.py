@@ -17,7 +17,8 @@ import time
 from typing import Optional
 
 ## Local imports
-from src.core.config import ensure_directories_exist
+from src.core.data_consistency import run_data_consistency
+from src.core.config import CONFIG, ensure_directories_exist
 from src.utils.logging_utils import get_logger
 
 ## ============================================================
@@ -153,6 +154,24 @@ def main() -> int:
         ## Ensure directories
         ensure_directories_exist()
 
+        ## ============================================================
+        ## DATA CONSISTENCY CHECK (DEDUP)
+        ## ============================================================
+
+        if CONFIG.data_consistency.enabled:
+
+            consistency_result = run_data_consistency(
+                data={
+                    "records": [
+                        {"text": "sample text for validation"}
+                    ],
+                    "similarity_threshold": CONFIG.deduplication.default_similarity_threshold,
+                },
+                strict=CONFIG.data_consistency.strict_mode,
+            )
+
+            LOGGER.info("Consistency OK | %s", consistency_result["is_consistent"])
+            
         ## Log context
         LOGGER.info("Application bootstrap completed")
         LOGGER.info("ENV=%s", os.getenv("ENV", "dev"))

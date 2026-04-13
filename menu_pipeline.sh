@@ -6,7 +6,7 @@ set -euo pipefail
 # Author: Georges Nassopoulos
 # Version: 1.0.0
 # Description:
-#   CLI menu to run the main Data Deduplication pipelines:
+#   CLI menu to run the main Data Deduplication pipelines (with data consistency):
 #   - run FastAPI (routes defined in src/core/service.py)
 #   - print registered routes
 #   - run unit tests
@@ -27,7 +27,7 @@ set -euo pipefail
 
 print_header() {
   echo "============================================================"
-  echo " Data Deduplication - Pipeline Menu"
+  echo " Data Deduplication - Pipeline Menu (with data consistency)"
   echo "============================================================"
   echo " Host : ${API_HOST}"
   echo " Port : ${API_PORT}"
@@ -132,11 +132,11 @@ PY
 while true; do
   print_header
   echo "Choose an option:"
-  echo "  1) Run FastAPI (dev)"
-  echo "  2) Print registered routes"
-  echo "  3) Run unit tests"
-  echo "  4) Run smoke check"
-  echo "  5) Run EDA (Plotly HTML)"
+  echo "  1) Run FastAPI (dev) (with data consistency)"
+  echo "  2) Print registered routes (with data consistency)"
+  echo "  3) Run unit tests (with data consistency)"
+  echo "  4) Run smoke check (with data consistency)"
+  echo "  5) Run EDA (Plotly HTML) (with data consistency)"
   echo "  0) Exit"
   echo "------------------------------------------------------------"
 

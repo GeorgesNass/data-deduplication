@@ -178,6 +178,26 @@ class DeduplicationConfig:
     export_format: str
 
 @dataclass(frozen=True)
+class DataConsistencyConfig:
+    """
+        Data consistency configuration
+
+        Args:
+            enabled: Enable consistency checks
+            strict_mode: Raise error if inconsistency
+            min_text_length: Minimum text length
+            max_records: Maximum dataset size
+
+        Returns:
+            None
+    """
+
+    enabled: bool
+    strict_mode: bool
+    min_text_length: int
+    max_records: int
+    
+@dataclass(frozen=True)
 class SecretsConfig:
     """
         Secret values resolved from env or files
@@ -201,6 +221,7 @@ class AppConfig:
             runtime: Runtime configuration
             deduplication: Deduplication configuration
             secrets: Secret values
+            data_consistency: Data consistency configuration
     """
 
     app_name: str
@@ -210,6 +231,7 @@ class AppConfig:
     runtime: RuntimeConfig
     deduplication: DeduplicationConfig
     secrets: SecretsConfig
+    data_consistency: DataConsistencyConfig
 
 ## ============================================================
 ## DOTENV / ENV HELPERS
@@ -833,6 +855,19 @@ def _validate_config(config: AppConfig) -> None:
     ## Validate deduplication parameters
     _validate_probability(config.deduplication.default_similarity_threshold, "DEFAULT_SIMILARITY_THRESHOLD")
 
+    ## Validate data consistency config
+    if config.data_consistency.enabled:
+
+        _validate_positive_int(
+            config.data_consistency.min_text_length,
+            "DATA_CONSISTENCY_MIN_TEXT_LENGTH",
+        )
+
+        _validate_positive_int(
+            config.data_consistency.max_records,
+            "DATA_CONSISTENCY_MAX_RECORDS",
+        )
+        
     ## Validate fixed config files
     if config.paths.swagger_config_path.suffix.lower() not in {".yaml", ".yml"}:
         raise ConfigurationError("SWAGGER_CONFIG_PATH must point to a YAML file")
@@ -1056,6 +1091,14 @@ def get_config() -> AppConfig:
         export_format=_validate_export_format(_get_profiled_env("DEFAULT_EXPORT_FORMAT", "json", profile)),
     )
 
+    ## Build data consistency config
+    data_consistency = DataConsistencyConfig(
+        enabled=get_env_bool("DATA_CONSISTENCY_ENABLED", True),
+        strict_mode=get_env_bool("DATA_CONSISTENCY_STRICT", False),
+        min_text_length=get_env_int("DATA_CONSISTENCY_MIN_TEXT_LENGTH", 3),
+        max_records=get_env_int("DATA_CONSISTENCY_MAX_RECORDS", 100000),
+    )
+    
     ## Resolve optional secrets
     secrets = SecretsConfig(
         api_key=_read_secret_value("API_KEY", "API_KEY_FILE", project_root=project_root),
@@ -1070,6 +1113,7 @@ def get_config() -> AppConfig:
         runtime=runtime,
         deduplication=deduplication,
         secrets=secrets,
+        data_consistency=data_consistency,
     )
 
     ## Validate final configuration
