@@ -146,6 +146,11 @@ class RuntimeConfig:
             batch_sleep_seconds: Sleep delay between batches
             request_timeout_seconds: Request timeout
             allowed_origins: Allowed HTTP origins for future usage
+            anomaly_detection_enabled: Enable anomaly detection
+            anomaly_method: Detection method (zscore / iqr)
+            z_threshold: Z-score threshold
+            iqr_multiplier: IQR multiplier
+            anomaly_strict_mode: Strict validation mode          
     """
 
     environment: str
@@ -159,7 +164,12 @@ class RuntimeConfig:
     batch_sleep_seconds: float
     request_timeout_seconds: int
     allowed_origins: list[str]
-
+    anomaly_detection_enabled: bool
+    anomaly_method: str
+    z_threshold: float
+    iqr_multiplier: float
+    anomaly_strict_mode: bool  
+    
 @dataclass(frozen=True)
 class DeduplicationConfig:
     """
@@ -874,6 +884,16 @@ def _validate_config(config: AppConfig) -> None:
     if config.paths.data_control_config_path.suffix.lower() != ".json":
         raise ConfigurationError("DATA_CONTROL_CONFIG_PATH must point to a JSON file")
 
+    ## validate anomaly detection config
+    if config.runtime.z_threshold <= 0:
+        raise ConfigurationError("Z_THRESHOLD must be > 0")
+
+    if config.runtime.iqr_multiplier <= 0:
+        raise ConfigurationError("IQR_MULTIPLIER must be > 0")
+
+    if config.runtime.anomaly_method not in {"zscore", "iqr"}:
+        raise ConfigurationError("ANOMALY_METHOD must be 'zscore' or 'iqr'")
+        
 ## ============================================================
 ## PROJECT-SPECIFIC LOADERS
 ## ============================================================
@@ -1081,6 +1101,11 @@ def get_config() -> AppConfig:
         batch_sleep_seconds=_get_profiled_env_float("BATCH_SLEEP_SECONDS", 0.0, profile),
         request_timeout_seconds=_get_profiled_env_int("REQUEST_TIMEOUT_SECONDS", 120, profile),
         allowed_origins=get_env_list("ALLOWED_ORIGINS", ["*"]),
+        anomaly_detection_enabled=get_env_bool("ANOMALY_DETECTION_ENABLED", True),
+        anomaly_method=get_env_str("ANOMALY_METHOD", "zscore"),
+        z_threshold=get_env_float("Z_THRESHOLD", 3.0),
+        iqr_multiplier=get_env_float("IQR_MULTIPLIER", 1.5),
+        anomaly_strict_mode=get_env_bool("ANOMALY_STRICT_MODE", False),        
     )
 
     ## Build deduplication section

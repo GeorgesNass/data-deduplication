@@ -20,6 +20,7 @@ from fastapi.testclient import TestClient
 ## Local imports
 from src import pipeline
 from src.core.data_consistency import run_data_consistency
+from src.core.data_quality import run_data_quality
 from src.core.controls import build_error_response, build_success_response, safe_run
 from src.core.errors import ApplicationError, ValidationError
 from src.core.schema import (
@@ -595,3 +596,72 @@ def test_data_consistency_invalid_threshold() -> None:
     result = run_data_consistency(data=data)
 
     assert result["is_consistent"] is False
+    
+## ============================================================
+## DATA QUALITY (DEDUP)
+## ============================================================
+def test_data_quality_valid() -> None:
+    """
+        Validate normal deduplication metrics
+
+        Returns:
+            None
+    """
+
+    data = {
+        "similarity_threshold": 0.8,
+        "records_count": 10,
+    }
+
+    result = run_data_quality(data=data)
+
+    assert result["is_valid"] is True
+    assert result["errors"] == 0
+
+def test_data_quality_outlier() -> None:
+    """
+        Detect anomaly in dedup metrics
+
+        Returns:
+            None
+    """
+
+    data = {
+        "similarity_threshold": 0.8,
+        "records_count": 999999,
+    }
+
+    result = run_data_quality(data=data)
+
+    assert result["warnings"] > 0
+
+def test_data_quality_invalid() -> None:
+    """
+        Detect invalid values
+
+        Returns:
+            None
+    """
+
+    data = {
+        "similarity_threshold": float("nan"),
+    }
+
+    result = run_data_quality(data=data)
+
+    assert result["errors"] > 0
+
+def test_data_quality_strict() -> None:
+    """
+        Strict mode should fail
+
+        Returns:
+            None
+    """
+
+    data = {
+        "similarity_threshold": float("nan"),
+    }
+
+    with pytest.raises(Exception):
+        run_data_quality(data=data, strict=True)

@@ -18,6 +18,7 @@ from typing import Optional
 
 ## Local imports
 from src.core.data_consistency import run_data_consistency
+from src.core.data_quality import run_data_quality
 from src.core.config import CONFIG, ensure_directories_exist
 from src.utils.logging_utils import get_logger
 
@@ -171,7 +172,29 @@ def main() -> int:
             )
 
             LOGGER.info("Consistency OK | %s", consistency_result["is_consistent"])
-            
+
+        ## ============================================================
+        ## DATA QUALITY CHECK (DEDUP)
+        ## ============================================================
+
+        if CONFIG.runtime.anomaly_detection_enabled:
+
+            quality_result = run_data_quality(
+                data={
+                    "similarity_threshold": CONFIG.deduplication.default_similarity_threshold,
+                    "records_count": 1,
+                },
+                method=CONFIG.runtime.anomaly_method,
+                z_threshold=CONFIG.runtime.z_threshold,
+                iqr_multiplier=CONFIG.runtime.iqr_multiplier,
+                strict=CONFIG.runtime.anomaly_strict_mode,
+            )
+
+            LOGGER.info("Quality score | %s", quality_result["score"])
+
+            if quality_result["errors"] > 0:
+                raise Exception("Data quality failed at bootstrap")
+
         ## Log context
         LOGGER.info("Application bootstrap completed")
         LOGGER.info("ENV=%s", os.getenv("ENV", "dev"))
