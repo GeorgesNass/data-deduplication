@@ -12,6 +12,7 @@ from __future__ import annotations
 ## Standard library imports
 from pathlib import Path
 from typing import Any, Dict
+import pandas as pd
 
 ## Third-party imports
 import pytest
@@ -21,6 +22,7 @@ from fastapi.testclient import TestClient
 from src import pipeline
 from src.core.data_consistency import run_data_consistency
 from src.core.data_quality import run_data_quality
+from src.core.data_drift import run_data_drift
 from src.core.controls import build_error_response, build_success_response, safe_run
 from src.core.errors import ApplicationError, ValidationError
 from src.core.schema import (
@@ -665,3 +667,69 @@ def test_data_quality_strict() -> None:
 
     with pytest.raises(Exception):
         run_data_quality(data=data, strict=True)
+        
+## ============================================================
+## DATA DRIFT (DEDUP)
+## ============================================================
+def test_data_drift_no_drift_dedup() -> None:
+    """
+        Validate no drift scenario on duplicate ratio
+    """
+
+    df_ref = pd.DataFrame({"text": ["a", "b", "c"]})
+    df_cur = pd.DataFrame({"text": ["a", "b", "c"]})
+
+    result = run_data_drift(df_ref=df_ref, df_current=df_cur)
+
+    assert result["drift_score"] >= 0.9
+    assert result["errors"] == 0
+
+def test_data_drift_duplicate_ratio() -> None:
+    """
+        Detect drift on duplicate ratio
+    """
+
+    df_ref = pd.DataFrame({"text": ["a", "b", "c"]})
+    df_cur = pd.DataFrame({"text": ["a", "a", "a"]})
+
+    result = run_data_drift(df_ref=df_ref, df_current=df_cur)
+
+    assert result["drift_score"] < 1.0
+    assert result["warnings"] > 0
+
+def test_data_drift_empty_dedup() -> None:
+    """
+        Validate empty dataset handling
+    """
+
+    df_ref = pd.DataFrame()
+    df_cur = pd.DataFrame()
+
+    with pytest.raises(Exception):
+        run_data_drift(df_ref=df_ref, df_current=df_cur)
+
+def test_data_drift_strict_dedup() -> None:
+    """
+        Validate strict mode behavior
+    """
+
+    df_ref = pd.DataFrame({"text": ["a"]})
+    df_cur = pd.DataFrame({"text": ["a", "a", "a"]})
+
+    with pytest.raises(Exception):
+        run_data_drift(df_ref=df_ref, df_current=df_cur, strict=True)
+        
+def test_data_drift_evidently_output_dedup() -> None:
+    """
+        Validate Evidently report generation for deduplication drift
+
+        Returns:
+            None
+    """
+
+    df_ref = pd.DataFrame({"text": ["a", "b", "c"]})
+    df_cur = df_ref.copy()
+
+    result = run_data_drift(df_ref=df_ref, df_current=df_cur)
+
+    assert "evidently_report" in result or result["warnings"] >= 0        

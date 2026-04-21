@@ -4,13 +4,14 @@ set -euo pipefail
 ###############################################################################
 # Data Deduplication - Pipeline Menu
 # Author: Georges Nassopoulos
-# Version: 1.0.0
+# Version: 1.1.0
 # Description:
-#   CLI menu to run the main Data Deduplication pipelines (with data consistency + data quality):
+#   CLI menu to run the main Data Deduplication pipelines (with data consistency + data quality + data drift):
 #   - run FastAPI (routes defined in src/core/service.py)
 #   - print registered routes
 #   - run unit tests
 #   - run quick smoke checks
+#   - run data drift
 ###############################################################################
 
 ## ============================================================
@@ -27,7 +28,7 @@ set -euo pipefail
 
 print_header() {
   echo "============================================================"
-  echo " Data Deduplication - Pipeline Menu (with data consistency + data quality)"
+  echo " Data Deduplication - Pipeline Menu (with data consistency + data quality + data drift)"
   echo "============================================================"
   echo " Host : ${API_HOST}"
   echo " Port : ${API_PORT}"
@@ -125,6 +126,32 @@ print(f"OK: EDA plots written to: {out_dir}")
 PY
 }
 
+## -----------------------------
+## NEW: DATA DRIFT
+## -----------------------------
+run_data_drift() {
+  echo "## Running data drift"
+
+  read -r -p "Reference dataset path [default: ./artifacts/reference.csv]: " REF_PATH
+  REF_PATH="${REF_PATH:-./artifacts/reference.csv}"
+
+  read -r -p "Current dataset path [default: ./artifacts/current.csv]: " CUR_PATH
+  CUR_PATH="${CUR_PATH:-./artifacts/current.csv}"
+
+  python - <<PY
+import pandas as pd
+from src.core.data_drift import run_data_drift
+
+df_ref = pd.read_csv("${REF_PATH}")
+df_cur = pd.read_csv("${CUR_PATH}")
+
+result = run_data_drift(df_ref=df_ref, df_current=df_cur)
+
+print("Drift score:", result["drift_score"])
+print("Warnings:", result["warnings"])
+PY
+}
+
 ## ============================================================
 ## MENU
 ## ============================================================
@@ -137,6 +164,7 @@ while true; do
   echo "  3) Run unit tests (with data consistency + data quality)"
   echo "  4) Run smoke check (with data consistency + data quality)"
   echo "  5) Run EDA (Plotly HTML) (with data consistency + data quality)"
+  echo "  6) Run data drift"
   echo "  0) Exit"
   echo "------------------------------------------------------------"
 
@@ -162,6 +190,10 @@ while true; do
       ;;
     5)
       run_eda
+      pause
+      ;;
+    6)
+      run_data_drift
       pause
       ;;
     0)

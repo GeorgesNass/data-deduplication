@@ -150,7 +150,11 @@ class RuntimeConfig:
             anomaly_method: Detection method (zscore / iqr)
             z_threshold: Z-score threshold
             iqr_multiplier: IQR multiplier
-            anomaly_strict_mode: Strict validation mode          
+            anomaly_strict_mode: Strict validation mode
+            drift_detection_enabled: Enable data drift detection
+            drift_p_value_threshold: Statistical p-value threshold for drift detection
+            drift_duplicate_threshold: Threshold for duplicate ratio drift
+            drift_strict_mode: Fail pipeline if drift detected            
     """
 
     environment: str
@@ -169,6 +173,10 @@ class RuntimeConfig:
     z_threshold: float
     iqr_multiplier: float
     anomaly_strict_mode: bool  
+    drift_detection_enabled: bool
+    drift_p_value_threshold: float
+    drift_duplicate_threshold: float
+    drift_strict_mode: bool
     
 @dataclass(frozen=True)
 class DeduplicationConfig:
@@ -884,7 +892,7 @@ def _validate_config(config: AppConfig) -> None:
     if config.paths.data_control_config_path.suffix.lower() != ".json":
         raise ConfigurationError("DATA_CONTROL_CONFIG_PATH must point to a JSON file")
 
-    ## validate anomaly detection config
+    ## Validate anomaly detection config
     if config.runtime.z_threshold <= 0:
         raise ConfigurationError("Z_THRESHOLD must be > 0")
 
@@ -893,7 +901,15 @@ def _validate_config(config: AppConfig) -> None:
 
     if config.runtime.anomaly_method not in {"zscore", "iqr"}:
         raise ConfigurationError("ANOMALY_METHOD must be 'zscore' or 'iqr'")
-        
+
+    ## Validate drift parameters
+    _validate_probability(config.runtime.drift_p_value_threshold, "DRIFT_P_VALUE_THRESHOLD")
+
+    _validate_non_negative_float(
+        config.runtime.drift_duplicate_threshold,
+        "DRIFT_DUPLICATE_THRESHOLD",
+    )
+    
 ## ============================================================
 ## PROJECT-SPECIFIC LOADERS
 ## ============================================================
@@ -1105,7 +1121,11 @@ def get_config() -> AppConfig:
         anomaly_method=get_env_str("ANOMALY_METHOD", "zscore"),
         z_threshold=get_env_float("Z_THRESHOLD", 3.0),
         iqr_multiplier=get_env_float("IQR_MULTIPLIER", 1.5),
-        anomaly_strict_mode=get_env_bool("ANOMALY_STRICT_MODE", False),        
+        anomaly_strict_mode=get_env_bool("ANOMALY_STRICT_MODE", False),
+        drift_detection_enabled=get_env_bool("DRIFT_DETECTION_ENABLED", True),
+        drift_p_value_threshold=get_env_float("DRIFT_P_VALUE_THRESHOLD", 0.05),
+        drift_duplicate_threshold=get_env_float("DRIFT_DUPLICATE_THRESHOLD", 0.1),
+        drift_strict_mode=get_env_bool("DRIFT_STRICT_MODE", False),        
     )
 
     ## Build deduplication section

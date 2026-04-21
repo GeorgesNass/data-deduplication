@@ -14,11 +14,13 @@ import argparse
 import os
 import sys
 import time
+import pandas as pd
 from typing import Optional
 
 ## Local imports
 from src.core.data_consistency import run_data_consistency
 from src.core.data_quality import run_data_quality
+from src.core.data_drift import run_data_drift
 from src.core.config import CONFIG, ensure_directories_exist
 from src.utils.logging_utils import get_logger
 
@@ -155,10 +157,7 @@ def main() -> int:
         ## Ensure directories
         ensure_directories_exist()
 
-        ## ============================================================
         ## DATA CONSISTENCY CHECK (DEDUP)
-        ## ============================================================
-
         if CONFIG.data_consistency.enabled:
 
             consistency_result = run_data_consistency(
@@ -173,10 +172,7 @@ def main() -> int:
 
             LOGGER.info("Consistency OK | %s", consistency_result["is_consistent"])
 
-        ## ============================================================
         ## DATA QUALITY CHECK (DEDUP)
-        ## ============================================================
-
         if CONFIG.runtime.anomaly_detection_enabled:
 
             quality_result = run_data_quality(
@@ -195,6 +191,26 @@ def main() -> int:
             if quality_result["errors"] > 0:
                 raise Exception("Data quality failed at bootstrap")
 
+        ## DATA DRIFT CHECK (DEDUP)
+        if CONFIG.runtime.drift_detection_enabled:
+
+            df_ref = pd.DataFrame({"text": ["sample", "data"]})
+            df_cur = pd.DataFrame({"text": ["sample", "sample", "sample"]})
+
+            drift_result = run_data_drift(
+                df_ref=df_ref,
+                df_current=df_cur,
+                strict=CONFIG.runtime.drift_strict_mode,
+            )
+
+            LOGGER.info("Drift score | %s", drift_result["drift_score"])
+
+            if "evidently_report" in drift_result:
+                LOGGER.info("Evidently report | %s", drift_result["evidently_report"])
+                
+            if drift_result["errors"] > 0:
+                raise Exception("Data drift failed at bootstrap")
+                
         ## Log context
         LOGGER.info("Application bootstrap completed")
         LOGGER.info("ENV=%s", os.getenv("ENV", "dev"))
