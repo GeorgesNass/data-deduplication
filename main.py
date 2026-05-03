@@ -44,26 +44,12 @@ def _build_parser() -> argparse.ArgumentParser:
             ArgumentParser instance
     """
 
-    parser = argparse.ArgumentParser(
-        description="Data Deduplication bootstrap",
-        add_help=True,
-    )
-
-    parser.add_argument(
-        "--version",
-        action="version",
-        version=f"%(prog)s {APP_VERSION}",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Validate environment without executing bootstrap",
-    )
-    parser.add_argument(
-        "--validate-config",
-        action="store_true",
-        help="Validate environment and exit",
-    )
+    parser = argparse.ArgumentParser(description="Data Deduplication bootstrap", add_help=True,)
+   
+    parser.add_argument("--version", action="version", version=f"%(prog)s {APP_VERSION}",)
+    parser.add_argument("--dry-run", action="store_true", help="Validate environment without executing bootstrap",)
+    parser.add_argument("--validate-config", action="store_true", help="Validate environment and exit",)
+    parser.add_argument("--features", action="store_true", help="Enable feature engineering",)
 
     return parser
 
@@ -133,6 +119,8 @@ def main() -> int:
 
     parser = _build_parser()
     args = parser.parse_args()
+    
+    use_fe = bool(args.features)
 
     try:
         ## Validate environment
@@ -165,6 +153,7 @@ def main() -> int:
                     "records": [
                         {"text": "sample text for validation"}
                     ],
+                    "feature_engineering": use_fe,
                     "similarity_threshold": CONFIG.deduplication.default_similarity_threshold,
                 },
                 strict=CONFIG.data_consistency.strict_mode,
@@ -184,6 +173,7 @@ def main() -> int:
                 z_threshold=CONFIG.runtime.z_threshold,
                 iqr_multiplier=CONFIG.runtime.iqr_multiplier,
                 strict=CONFIG.runtime.anomaly_strict_mode,
+                text="sample text for validation",
             )
 
             LOGGER.info("Quality score | %s", quality_result["score"])

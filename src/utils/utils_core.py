@@ -14,6 +14,7 @@ import random
 import string
 import time
 import json
+import re
 import unicodedata
 from threading import Thread
 from typing import Any, Callable, Iterator, List, Sequence, TypeVar
@@ -318,3 +319,29 @@ def parse_request_payload(raw_bytes: bytes | None) -> dict:
                 message="Request payload must be valid JSON",
                 details=str(exc),
             )
+            
+def normalize_clinical_text(text: str) -> str:
+    """
+        Normalize text for deduplication and feature engineering
+
+        High-level workflow:
+            1) Lowercase
+            2) Normalize whitespace
+            3) Remove special characters (keep useful symbols)
+
+        Args:
+            text: Input text
+
+        Returns:
+            Normalized text
+    """
+
+
+    if not isinstance(text, str):
+        return ""
+
+    text = text.lower()
+    text = re.sub(r"\s+", " ", text)
+    text = re.sub(r"[^\w\s\.\-/%]", " ", text)
+
+    return text.strip()

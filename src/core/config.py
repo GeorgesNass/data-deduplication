@@ -214,6 +214,21 @@ class DataConsistencyConfig:
     strict_mode: bool
     min_text_length: int
     max_records: int
+  
+@dataclass(frozen=True)
+class FeatureEngineeringConfig:
+    """
+        Feature engineering configuration
+
+        Args:
+            enabled: Enable feature engineering
+            normalize_text: Apply text normalization
+            compute_text_stats: Compute text statistics (char_length, token_count)
+    """
+
+    enabled: bool
+    normalize_text: bool
+    compute_text_stats: bool
     
 @dataclass(frozen=True)
 class SecretsConfig:
@@ -240,6 +255,7 @@ class AppConfig:
             deduplication: Deduplication configuration
             secrets: Secret values
             data_consistency: Data consistency configuration
+            feature_engineering: Feature Engineering
     """
 
     app_name: str
@@ -250,6 +266,7 @@ class AppConfig:
     deduplication: DeduplicationConfig
     secrets: SecretsConfig
     data_consistency: DataConsistencyConfig
+    feature_engineering: FeatureEngineeringConfig
 
 ## ============================================================
 ## DOTENV / ENV HELPERS
@@ -1149,6 +1166,12 @@ def get_config() -> AppConfig:
         api_key=_read_secret_value("API_KEY", "API_KEY_FILE", project_root=project_root),
     )
 
+    feature_engineering = FeatureEngineeringConfig(
+        enabled=get_env_bool("FEATURE_ENGINEERING_ENABLED", False),
+        normalize_text=get_env_bool("FE_NORMALIZE_TEXT", True),
+        compute_text_stats=get_env_bool("FE_COMPUTE_STATS", True),
+    )
+
     ## Build final config
     config = AppConfig(
         app_name=get_env_str("APP_NAME", DEFAULT_APP_NAME) or DEFAULT_APP_NAME,
@@ -1159,6 +1182,7 @@ def get_config() -> AppConfig:
         deduplication=deduplication,
         secrets=secrets,
         data_consistency=data_consistency,
+        feature_engineering=feature_engineering,
     )
 
     ## Validate final configuration

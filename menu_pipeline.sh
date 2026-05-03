@@ -98,6 +98,11 @@ PY
 
 run_eda() {
   echo "## EDA: generate Plotly HTML reports from a CSV"
+
+  ## FE NEW
+  read -r -p "Enable feature engineering? (y/n) [default: n]: " FE
+  FE="${FE:-n}"
+
   read -r -p "Enter CSV path (e.g. data/raw/my_file.csv): " csv_path
   read -r -p "Enter output dir (default: eda_outputs): " out_dir
   out_dir="${out_dir:-eda_outputs}"
@@ -116,6 +121,9 @@ if not csv_path.exists():
 
 df = pd.read_csv(csv_path, sep=",", encoding="utf-8", low_memory=False)
 
+## FE NEW (placeholder usage)
+use_fe = "${FE}".lower() == "y"
+
 statistics_plots(
     df=df,
     output_dir=out_dir,
@@ -132,6 +140,10 @@ PY
 run_data_drift() {
   echo "## Running data drift"
 
+  ## FE NEW
+  read -r -p "Enable feature engineering? (y/n) [default: n]: " FE
+  FE="${FE:-n}"
+
   read -r -p "Reference dataset path [default: ./artifacts/reference.csv]: " REF_PATH
   REF_PATH="${REF_PATH:-./artifacts/reference.csv}"
 
@@ -144,6 +156,9 @@ from src.core.data_drift import run_data_drift
 
 df_ref = pd.read_csv("${REF_PATH}")
 df_cur = pd.read_csv("${CUR_PATH}")
+
+## FE NEW (placeholder usage)
+use_fe = "${FE}".lower() == "y"
 
 result = run_data_drift(df_ref=df_ref, df_current=df_cur)
 

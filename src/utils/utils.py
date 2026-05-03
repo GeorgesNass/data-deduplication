@@ -25,6 +25,7 @@ from src.utils.utils_core import (
     now_ts,
     elapsed_seconds,
     parse_request_payload,
+    normalize_clinical_text,
 )
 
 from src.utils.utils_io import (

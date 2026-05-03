@@ -20,6 +20,8 @@ from fastapi.testclient import TestClient
 
 ## Local imports
 from src import pipeline
+from src.pipeline import run_pipeline
+
 from src.core.data_consistency import run_data_consistency
 from src.core.data_quality import run_data_quality
 from src.core.data_drift import run_data_drift
@@ -39,8 +41,7 @@ from src.model.cleaning import (
     normalize_text,
     parse_nested_list,
 )
-from src.pipeline import run_pipeline
-
+from src.utils.utils import normalize_clinical_text
 ## ============================================================
 ## FIXTURES
 ## ============================================================
@@ -732,4 +733,29 @@ def test_data_drift_evidently_output_dedup() -> None:
 
     result = run_data_drift(df_ref=df_ref, df_current=df_cur)
 
-    assert "evidently_report" in result or result["warnings"] >= 0        
+    assert "evidently_report" in result or result["warnings"] >= 0
+    
+def test_normalize_clinical_text_fe() -> None:
+    """
+        Validate clinical text normalization for feature engineering
+    """
+
+    raw = "  Sodium µmol/L !!!  "
+    normalized = normalize_clinical_text(raw)
+
+    assert isinstance(normalized, str)
+    assert len(normalized) > 0
+
+def test_text_features_fe() -> None:
+    """
+        Validate basic feature engineering text statistics
+    """
+
+    text = "Glucose 5.5 mmol/L"
+    normalized = normalize_clinical_text(text)
+
+    char_length = len(normalized)
+    token_count = len(normalized.split())
+
+    assert char_length > 0
+    assert token_count >= 2

@@ -199,3 +199,50 @@ def winsorize_series(
     except Exception as exc:
         logger.exception(f"Error during winsorization: {exc}")
         raise DataError("Winsorization failed") from exc
+        
+def compute_text_stats(df: pd.DataFrame) -> pd.DataFrame:
+    """
+        Compute text-based statistics for feature engineering
+
+        High-level workflow:
+            1) Validate input dataframe
+            2) Ensure text column exists
+            3) Compute char_length and token_count
+            4) Compute aggregated statistics
+
+        Args:
+            df: Input dataframe with a "text" column
+
+        Returns:
+            DataFrame with aggregated statistics
+    """
+
+    try:
+        if df is None or df.empty:
+            logger.error("Empty dataframe for text stats")
+            raise ValidationError("DataFrame is empty")
+
+        if "text" not in df.columns:
+            logger.error("Missing 'text' column")
+            raise ValidationError("Missing text column")
+
+        text_series = df["text"].fillna("").astype(str)
+
+        char_length = text_series.apply(len)
+        token_count = text_series.apply(lambda x: len(x.split()))
+
+        stats = pd.DataFrame({
+            "char_length": char_length,
+            "token_count": token_count,
+        })
+
+        logger.debug("Text stats computed")
+
+        return stats
+
+    except ValidationError:
+        raise
+
+    except Exception as exc:
+        logger.exception(f"Error computing text stats: {exc}")
+        raise DataError("Failed to compute text stats") from exc

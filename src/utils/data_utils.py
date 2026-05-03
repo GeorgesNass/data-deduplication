@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from src.utils.utils import normalize_clinical_text
 from src.utils.logging_utils import get_logger
 
 ## ============================================================
@@ -30,14 +31,19 @@ def normalize_data(data: Dict[str, Any]) -> Dict[str, Any]:
     """
 
     normalized = {}
+    
+    use_fe = data.get("feature_engineering", False)
 
     for key, value in data.items():
 
         ## Normalize strings
         if isinstance(value, str):
             logger.debug(f"Normalizing string: {key}")
-            value = value.strip().lower()
-
+            if use_fe:
+                value = normalize_clinical_text(value)
+            else:
+                value = value.strip().lower()
+                
         ## Normalize dataset
         if key == "records" and isinstance(value, list):
             logger.debug("Normalizing records")
@@ -46,9 +52,28 @@ def normalize_data(data: Dict[str, Any]) -> Dict[str, Any]:
 
             for record in value:
                 if isinstance(record, dict):
+
+                    raw_text = str(record.get("text", ""))
+
+                    text = (
+                        normalize_clinical_text(raw_text)
+                        if use_fe
+                        else raw_text.strip().lower()
+                    )
+
+                    if use_fe:
+                        record_features = {
+                            "normalized_text": text,
+                            "char_length": len(text),
+                            "token_count": len(text.split()),
+                        }
+                    else:
+                        record_features = {}
+
                     normalized_records.append({
-                        "text": str(record.get("text", "")).strip().lower(),
+                        "text": text,
                         **record,
+                        **record_features,
                     })
 
             value = normalized_records
