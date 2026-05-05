@@ -41,6 +41,7 @@ from src.model.cleaning import (
     normalize_text,
     parse_nested_list,
 )
+from src.utils.utils_io import build_features, push_features, get_features
 from src.utils.utils import normalize_clinical_text
 ## ============================================================
 ## FIXTURES
@@ -759,3 +760,63 @@ def test_text_features_fe() -> None:
 
     assert char_length > 0
     assert token_count >= 2
+    
+## ============================================================
+## FEATURE STORE TESTS
+## ============================================================
+def test_build_features_basic() -> None:
+    """
+        Validate feature engineering output structure
+
+        Returns:
+            None
+    """
+
+    row = {"text": "Hello", "value": 10}
+    features = build_features(row)
+
+    assert "text_length" in features
+    assert "text_lower" in features
+    assert "value_scaled" in features
+
+def test_push_get_features_redis() -> None:
+    """
+        Validate Redis feature store roundtrip
+
+        Returns:
+            None
+    """
+
+    entity_id = "test_1"
+    features = {"a": 1, "b": 2}
+
+    ## Push features
+    push_features(entity_id, features)
+
+    ## Retrieve features
+    retrieved = get_features(entity_id)
+
+    assert isinstance(retrieved, dict)
+    assert len(retrieved) > 0
+    
+def test_feature_engineering_integration() -> None:
+    """
+        Validate full FE + storage pipeline
+
+        Returns:
+            None
+    """
+
+    row = {"text": "Sample Data", "num": 5}
+
+    ## Build features
+    features = build_features(row)
+
+    ## Store features
+    push_features("entity_test", features)
+
+    ## Retrieve features
+    retrieved = get_features("entity_test")
+
+    assert isinstance(retrieved, dict)
+    assert len(retrieved) > 0

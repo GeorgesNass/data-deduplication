@@ -10,6 +10,14 @@ __desc__ = "I/O helper utilities: CSV read/write helpers and base64 decoding to 
 from __future__ import annotations
 
 ## Standard library imports
+import os
+import redis
+
+try:
+    from feast import FeatureStore
+except:
+    FeatureStore = None
+    
 import csv
 import base64
 from pathlib import Path
@@ -25,6 +33,13 @@ from src.utils.utils_core import safe_int
 ## ============================================================
 ## GLOBALS
 ## ============================================================
+FEATURE_STORE_MODE = os.getenv("FEATURE_STORE_MODE", "redis")
+
+REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
+FEAST_REPO_PATH = os.getenv("FEAST_REPO_PATH", "./feature_repo")
+
+redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
 
 ## Increase CSV field size to handle large text fields safely
 csv.field_size_limit(3_000_000)
@@ -204,3 +219,168 @@ def decode_base64_to_file(base64_content: str, output_path: str | Path) -> Path:
     out_path.write_bytes(decoded)
     
     return out_path
+
+## ============================================================
+## FEATURE ENGINEERING
+## ============================================================
+def build_features(row: Dict[str, Any]) -> Dict[str, Any]:
+    """
+        Build feature dictionary from a raw input row
+
+        Design:
+            - Lightweight feature engineering
+            - Works for text and numeric data
+            - No external dependency (pure Python)
+
+        Args:
+            row: Input record as dictionary
+
+        Returns:
+            dict[str, Any]: Feature dictionary
+    """
+
+    features: Dict[str, Any] = {}
+
+    for k, v in row.items():
+        ## Text features
+        if isinstance(v, str):
+            features[f"{k}_length"] = len(v)
+            features[f"{k}_lower"] = v.lower()
+
+        ## Numeric features
+        if isinstance(v, (int, float)):
+            features[f"{k}_scaled"] = v
+
+    return features
+    
+## ============================================================
+## FEATURE STORE - REDIS (LOCAL)
+## ============================================================
+def push_features_redis(entity_id: str, features: Dict[str, Any]) -> None:
+    """
+        Store features in Redis
+
+        Args:
+            entity_id: Unique identifier
+            features: Feature dictionary
+
+        Returns:
+            None
+    """
+
+    ## Store as Redis hash
+    redis_client.hset(entity_id, mapping=features)
+
+
+def get_features_redis(entity_id: str) -> Dict[str, Any]:
+    """
+        Retrieve features from Redis
+
+        Args:
+            entity_id: Unique identifier
+
+        Returns:
+            dict[str, Any]: Feature dictionary
+    """
+
+    ## Fetch from Redis
+    return redis_client.hgetall(entity_id)    
+    
+## ============================================================
+## FEATURE STORE - FEAST (ONLINE)
+## ============================================================
+def get_feast_store():
+    """
+        Initialize Feast Feature Store
+
+        Returns:
+            FeatureStore instance
+
+        Raises:
+            ImportError: If Feast is not installed
+    """
+
+    if FeatureStore is None:
+        raise ImportError("Feast not installed")
+
+    ## Initialize store
+    return FeatureStore(repo_path=FEAST_REPO_PATH)
+
+def push_features_feast(entity_id: str, features: Dict[str, Any]) -> None:
+    """
+        Push features to Feast online store
+
+        Args:
+            entity_id: Unique identifier
+            features: Feature dictionary
+
+        Returns:
+            None
+    """
+
+    import pandas as pd
+
+    ## Convert to DataFrame
+    df = pd.DataFrame([{**features, "entity_id": entity_id}])
+
+    ## Push to Feast
+    store = get_feast_store()
+    store.write_to_online_store(df)
+
+def get_features_feast(entity_id: str) -> Dict[str, Any]:
+    """
+        Retrieve features from Feast
+
+        Args:
+            entity_id: Unique identifier
+
+        Returns:
+            dict[str, Any]: Feature dictionary
+    """
+
+    ## Query Feast
+    store = get_feast_store()
+    result = store.get_online_features(
+        features=["features:*"],
+        entity_rows=[{"entity_id": entity_id}]
+    ).to_dict()
+
+    return result    
+     
+## ============================================================
+## FEATURE STORE - UNIFIED API
+## ============================================================
+def push_features(entity_id: str, features: Dict[str, Any]) -> None:
+    """
+        Unified interface to store features
+
+        Args:
+            entity_id: Unique identifier
+            features: Feature dictionary
+
+        Returns:
+            None
+    """
+
+    ## Route based on mode
+    if FEATURE_STORE_MODE == "redis":
+        push_features_redis(entity_id, features)
+    else:
+        push_features_feast(entity_id, features)
+
+def get_features(entity_id: str) -> Dict[str, Any]:
+    """
+        Unified interface to retrieve features
+
+        Args:
+            entity_id: Unique identifier
+
+        Returns:
+            dict[str, Any]: Feature dictionary
+    """
+
+    ## Route based on mode
+    if FEATURE_STORE_MODE == "redis":
+        return get_features_redis(entity_id)
+    else:
+        return get_features_feast(entity_id)

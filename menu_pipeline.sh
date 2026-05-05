@@ -22,6 +22,9 @@ set -euo pipefail
 : "${API_PORT:=8080}"
 : "${LOG_LEVEL:=INFO}"
 
+## NEW
+: "${FEATURE_STORE_MODE:=redis}"
+
 ## ============================================================
 ## HELPERS
 ## ============================================================
@@ -32,6 +35,7 @@ print_header() {
   echo "============================================================"
   echo " Host : ${API_HOST}"
   echo " Port : ${API_PORT}"
+  echo " Feature Store Mode : ${FEATURE_STORE_MODE}"
   echo "------------------------------------------------------------"
 }
 
@@ -45,6 +49,12 @@ pause() {
 
 run_api_dev() {
   echo "## Starting FastAPI (uvicorn dev runner)"
+
+  ## NEW
+  read -r -p "Feature store mode (redis/feast) [default: ${FEATURE_STORE_MODE}]: " FSM
+  FSM="${FSM:-$FEATURE_STORE_MODE}"
+  export FEATURE_STORE_MODE="$FSM"
+
   export API_HOST API_PORT LOG_LEVEL
   uvicorn src.core.service:app --host "${API_HOST}" --port "${API_PORT}"
 }
@@ -103,6 +113,11 @@ run_eda() {
   read -r -p "Enable feature engineering? (y/n) [default: n]: " FE
   FE="${FE:-n}"
 
+  ## NEW
+  read -r -p "Feature store mode (redis/feast) [default: ${FEATURE_STORE_MODE}]: " FSM
+  FSM="${FSM:-$FEATURE_STORE_MODE}"
+  export FEATURE_STORE_MODE="$FSM"
+
   read -r -p "Enter CSV path (e.g. data/raw/my_file.csv): " csv_path
   read -r -p "Enter output dir (default: eda_outputs): " out_dir
   out_dir="${out_dir:-eda_outputs}"
@@ -110,8 +125,11 @@ run_eda() {
   python - <<PY
 from pathlib import Path
 import pandas as pd
+import os
 
 from src.eda.plots import statistics_plots
+
+print("Feature Store Mode:", os.getenv("FEATURE_STORE_MODE"))
 
 csv_path = Path(r"${csv_path}").expanduser().resolve()
 out_dir = Path(r"${out_dir}").expanduser().resolve()
@@ -144,6 +162,11 @@ run_data_drift() {
   read -r -p "Enable feature engineering? (y/n) [default: n]: " FE
   FE="${FE:-n}"
 
+  ## NEW
+  read -r -p "Feature store mode (redis/feast) [default: ${FEATURE_STORE_MODE}]: " FSM
+  FSM="${FSM:-$FEATURE_STORE_MODE}"
+  export FEATURE_STORE_MODE="$FSM"
+
   read -r -p "Reference dataset path [default: ./artifacts/reference.csv]: " REF_PATH
   REF_PATH="${REF_PATH:-./artifacts/reference.csv}"
 
@@ -152,7 +175,10 @@ run_data_drift() {
 
   python - <<PY
 import pandas as pd
+import os
 from src.core.data_drift import run_data_drift
+
+print("Feature Store Mode:", os.getenv("FEATURE_STORE_MODE"))
 
 df_ref = pd.read_csv("${REF_PATH}")
 df_cur = pd.read_csv("${CUR_PATH}")

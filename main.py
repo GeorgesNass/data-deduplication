@@ -22,6 +22,7 @@ from src.core.data_consistency import run_data_consistency
 from src.core.data_quality import run_data_quality
 from src.core.data_drift import run_data_drift
 from src.core.config import CONFIG, ensure_directories_exist
+from src.utils.utils_io import build_features, push_features, get_features
 from src.utils.logging_utils import get_logger
 
 ## ============================================================
@@ -50,6 +51,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dry-run", action="store_true", help="Validate environment without executing bootstrap",)
     parser.add_argument("--validate-config", action="store_true", help="Validate environment and exit",)
     parser.add_argument("--features", action="store_true", help="Enable feature engineering",)
+    parser.add_argument("--feature-store-mode", type=str, choices=["redis", "feast"], default=None, help="Override FEATURE_STORE_MODE (redis or feast)",)
 
     return parser
 
@@ -119,8 +121,28 @@ def main() -> int:
 
     parser = _build_parser()
     args = parser.parse_args()
+ 
+    if args.feature_store_mode:
+        os.environ["FEATURE_STORE_MODE"] = args.feature_store_mode
     
     use_fe = bool(args.features)
+
+    ## FEATURE ENGINEERING + FEATURE STORE (OPTIONAL)
+    if use_fe:
+
+        ## Sample input
+        sample_row = {"text": "sample text for validation", "value": 1}
+
+        ## Build features
+        features = build_features(sample_row)
+
+        ## Store features
+        push_features("bootstrap_entity", features)
+
+        ## Retrieve features
+        retrieved_features = get_features("bootstrap_entity")
+
+        LOGGER.info("Feature Store OK | %s", bool(retrieved_features))
 
     try:
         ## Validate environment
